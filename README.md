@@ -4,9 +4,9 @@ Scrapes public drop-in activity schedules (skating, swimming, etc.) from a
 municipal PerfectMind recreation portal and shows them in one unified,
 filterable dashboard.
 
-Currently configured for **City of Coquitlam** (Skating + Swimming, next 14
-days). See [`config.py`](config.py) for how to point it at additional
-calendars or another PerfectMind-based city.
+Currently configured for **City of Coquitlam** and **City of Port Moody**
+(Skating + Swimming, next 14 days). See [`config.py`](config.py) for how to
+point it at additional calendars or another PerfectMind-based city.
 
 ## How it works
 
@@ -78,7 +78,8 @@ Only cities using PerfectMind's `BookMe4` widget work as-is. To add one:
 1. Open that city's PerfectMind widget in a browser.
 2. Click through to the drop-in category you want.
 3. Copy `calendarId` and `widgetId` from the resulting URL, and the
-   `base_url`/`org_id` from the domain and path.
+   `base_url`/`org_path` from the domain and path (see the comment at the
+   top of `config.py` — this part varies between cities).
 4. Add an entry to `SOURCES` in `config.py`.
 
 A different booking platform (ActiveNet, RecTrac, Amilia, etc.) would need

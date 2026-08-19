@@ -83,16 +83,21 @@ def build_login_url(source: dict) -> str:
     in directly on the city's real site, in their own browser, so their
     session there is already active when they click a "Register" link.
     """
-    widget_url = f"{source['base_url']}/{source['org_id']}/Clients/BookMe4?widgetId={source['widget_id']}"
+    widget_url = f"{source['base_url']}/{source['org_path']}/BookMe4?widgetId={source['widget_id']}"
+    # MemberRegistration lives directly under the top-level org segment even
+    # for cities whose org_path has a "/Clients" suffix for the BookMe4
+    # routes (e.g. Coquitlam is "23902/Clients" for booking, but login is
+    # under plain "23902") — so only the first path segment applies here.
+    org_root = source["org_path"].split("/", 1)[0]
     return (
-        f"{source['base_url']}/{source['org_id']}/MemberRegistration/MemberSignIn"
+        f"{source['base_url']}/{org_root}/MemberRegistration/MemberSignIn"
         f"?returnUrl={quote(widget_url, safe='')}"
     )
 
 
 def _get_session_and_token(session: requests.Session, source: dict) -> str:
     url = (
-        f"{source['base_url']}/{source['org_id']}/Clients/BookMe4BookingPages/Classes"
+        f"{source['base_url']}/{source['org_path']}/BookMe4BookingPages/Classes"
         f"?calendarId={source['calendar_id']}&widgetId={source['widget_id']}&embed=False"
     )
     resp = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=20)
@@ -116,7 +121,7 @@ def _fetch_classes_page(
     page: int,
 ) -> dict:
     post_url = (
-        f"{source['base_url']}/{source['org_id']}/Clients/BookMe4BookingPagesV2/ClassesV2"
+        f"{source['base_url']}/{source['org_path']}/BookMe4BookingPagesV2/ClassesV2"
     )
     body = {
         "calendarId": source["calendar_id"],
@@ -159,7 +164,7 @@ def _normalize(raw: dict, source: dict) -> Event:
 
     event_id = raw.get("EventId", "")
     detail_url = (
-        f"{source['base_url']}/{source['org_id']}/Clients/BookMe4LandingPages/Class"
+        f"{source['base_url']}/{source['org_path']}/BookMe4LandingPages/Class"
         f"?widgetId={source['widget_id']}&redirectedFromEmbededMode=False"
         f"&classId={event_id}&occurrenceDate={occurrence}"
         if event_id and occurrence

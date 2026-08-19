@@ -19,12 +19,12 @@
   <h1>Activity Schedule Dashboard</h1>
   <div class="topbar-meta">
     <span id="last-updated" data-fetched-at="{{ fetched_at }}">Loading…</span>
-    {% if login_url %}
-    <a class="login-link" href="{{ login_url }}" target="_blank" rel="noopener noreferrer"
-       title="Opens the City of Coquitlam's official sign-in page in a new tab">
-      Log in on city site ↗
+    {% for link in login_links %}
+    <a class="login-link" href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
+       title="Opens {{ link.name }}'s official sign-in page in a new tab">
+      Log in ({{ link.name.replace('City of ', '') }}) ↗
     </a>
-    {% endif %}
+    {% endfor %}
     <button id="refresh-btn" type="button">Refresh</button>
   </div>
 </header>
@@ -66,7 +66,7 @@
 </main>
 
 <footer>
-  <p>Source: {{ activity_types|length and 'City of Coquitlam (PerfectMind public schedule widget)' }} &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>
+  <p>Sources: {{ source_names|join(', ') }} (PerfectMind public schedule widgets) &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>
 </footer>
 
 <script id="events-data" type="application/json">{{ events | tojson }}</script>

@@ -34,12 +34,27 @@ def _get_events(force: bool = False) -> dict:
         }
 
 
+def _login_links() -> list[dict]:
+    """One login link per distinct city (not per calendar)."""
+    seen = set()
+    links = []
+    for source in config.SOURCES:
+        key = (source["source_name"], source["base_url"], source["org_path"])
+        if key in seen:
+            continue
+        seen.add(key)
+        links.append(
+            {"name": source["source_name"], "url": scraper.build_login_url(source)}
+        )
+    return links
+
+
 @app.route("/")
 def index():
     data = _get_events()
     activity_types = sorted({e["activity_type"] for e in data["events"]})
     locations = sorted({e["location"] for e in data["events"] if e["location"]})
-    login_url = scraper.build_login_url(config.SOURCES[0]) if config.SOURCES else None
+    source_names = sorted({s["source_name"] for s in config.SOURCES})
     return render_template(
         "index.html",
         events=data["events"],
@@ -48,7 +63,8 @@ def index():
         activity_types=activity_types,
         locations=locations,
         window_days=config.SCHEDULE_WINDOW_DAYS,
-        login_url=login_url,
+        login_links=_login_links(),
+        source_names=source_names,
     )
 
 
