@@ -262,7 +262,10 @@ footer {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  z-index: 100;
+  /* Max int32 z-index: some browser extensions inject floating UI at very
+     high z-index values that can otherwise sit on top of this and steal
+     clicks meant for the modal's own buttons. */
+  z-index: 2147483647;
 }
 
 .modal-card {
