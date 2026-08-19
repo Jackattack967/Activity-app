@@ -27,14 +27,16 @@
     {% endfor %}
     <button id="preferences-btn" type="button" title="Choose your default activity, location, and spots filter">⚙ Preferences</button>
     <button id="refresh-btn" type="button">Refresh</button>
-    {% if logged_in %}
-    <span class="account-badge" title="{{ current_user_name }}">
-      {% if current_user_picture %}<img src="{{ current_user_picture }}" alt="" class="account-avatar">{% endif %}
-      {{ current_user_name }}
-    </span>
-    <a class="login-link" href="{{ url_for('auth.logout') }}">Log out</a>
-    {% else %}
-    <a class="google-signin-btn" href="{{ url_for('auth.login_google') }}">Sign in with Google</a>
+    {% if accounts_enabled %}
+      {% if logged_in %}
+      <span class="account-badge" title="{{ current_user_name }}">
+        {% if current_user_picture %}<img src="{{ current_user_picture }}" alt="" class="account-avatar">{% endif %}
+        {{ current_user_name }}
+      </span>
+      <a class="login-link" href="{{ url_for('auth.logout') }}">Log out</a>
+      {% else %}
+      <a class="google-signin-btn" href="{{ url_for('auth.login_google') }}">Sign in with Google</a>
+      {% endif %}
     {% endif %}
   </div>
 </header>

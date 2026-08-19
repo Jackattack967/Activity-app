@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import dataclasses
+import logging
 import os
+import secrets
 import threading
 import time
 from pathlib import Path
@@ -23,22 +25,52 @@ import scraper
 from auth import auth_bp, init_auth
 from models import Favorite, Preference, db
 
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ["FLASK_SECRET_KEY"]
-app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["DATABASE_URL"]
-app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
 
 # Render terminates TLS at its proxy and forwards plain HTTP internally.
 # Without this, url_for(_external=True) builds the OAuth redirect URI as
 # http:// — which won't match the https:// URI registered with Google.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-db.init_app(app)
-init_auth(app)
-app.register_blueprint(auth_bp)
+# Accounts are an optional layer: the schedule dashboard is the core of this
+# app and must keep working even if the database or Google credentials are
+# missing/misconfigured. Rather than refusing to boot (which takes the whole
+# site down over an optional feature), log loudly and run without accounts.
+ACCOUNT_ENV_VARS = (
+    "DATABASE_URL",
+    "GOOGLE_CLIENT_ID",
+    "GOOGLE_CLIENT_SECRET",
+    "FLASK_SECRET_KEY",
+)
+missing_env = [name for name in ACCOUNT_ENV_VARS if not os.environ.get(name)]
 
-with app.app_context():
-    db.create_all()
+app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
+
+ACCOUNTS_ENABLED = False
+if missing_env:
+    logger.error(
+        "Accounts disabled — missing environment variable(s): %s. The schedule "
+        "dashboard will still work, but sign-in, synced preferences, and "
+        "favorites are unavailable until these are set.",
+        ", ".join(missing_env),
+    )
+else:
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["DATABASE_URL"]
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
+    try:
+        db.init_app(app)
+        init_auth(app)
+        app.register_blueprint(auth_bp)
+        with app.app_context():
+            db.create_all()
+        ACCOUNTS_ENABLED = True
+    except Exception:
+        logger.exception(
+            "Accounts disabled — failed to initialize the database or Google "
+            "sign-in. The schedule dashboard will still work."
+        )
 
 _cache_lock = threading.Lock()
 _cache: dict = {"events": [], "errors": [], "fetched_at": 0.0}
@@ -61,8 +93,18 @@ def _get_events(force: bool = False) -> dict:
         }
 
 
+def _is_logged_in() -> bool:
+    """Safe to call even when accounts are disabled (no login manager)."""
+    if not ACCOUNTS_ENABLED:
+        return False
+    try:
+        return current_user.is_authenticated
+    except Exception:
+        return False
+
+
 def _favorited_course_ids() -> set[tuple[str, str]]:
-    if not current_user.is_authenticated:
+    if not _is_logged_in():
         return set()
     return {(f.source_name, f.course_id) for f in current_user.favorites}
 
@@ -121,7 +163,7 @@ def api_events():
 
 @app.route("/api/preferences", methods=["GET", "POST"])
 def api_preferences():
-    if not current_user.is_authenticated:
+    if not _is_logged_in():
         return jsonify({"error": "not authenticated"}), 401
 
     if request.method == "POST":
@@ -146,7 +188,7 @@ def api_preferences():
 
 @app.route("/api/favorites", methods=["GET", "POST"])
 def api_favorites():
-    if not current_user.is_authenticated:
+    if not _is_logged_in():
         return jsonify({"error": "not authenticated"}), 401
 
     if request.method == "POST":
@@ -186,10 +228,12 @@ def api_favorites():
 
 @app.context_processor
 def inject_user():
+    logged_in = _is_logged_in()
     return {
-        "logged_in": current_user.is_authenticated,
-        "current_user_name": current_user.name if current_user.is_authenticated else None,
-        "current_user_picture": current_user.picture_url if current_user.is_authenticated else None,
+        "accounts_enabled": ACCOUNTS_ENABLED,
+        "logged_in": logged_in,
+        "current_user_name": current_user.name if logged_in else None,
+        "current_user_picture": current_user.picture_url if logged_in else None,
     }
 
 
