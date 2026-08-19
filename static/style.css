@@ -276,9 +276,32 @@ footer {
   overflow-y: auto;
 }
 
+.modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
 .modal-card h2 {
   margin: 0 0 0.4rem;
   font-size: 1.2rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem 0.4rem;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+.modal-close:hover {
+  background: var(--gray-bg);
+  color: var(--text);
 }
 
 .modal-sub {

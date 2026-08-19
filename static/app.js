@@ -15,6 +15,7 @@
   const prefOpenOnlyEl = document.getElementById("pref-open-only");
   const prefSaveBtn = document.getElementById("pref-save-btn");
   const prefSkipBtn = document.getElementById("pref-skip-btn");
+  const prefCloseBtn = document.getElementById("pref-close-btn");
   const PREFS_KEY = "activityDashboardPreferences";
 
   let allEvents = JSON.parse(document.getElementById("events-data").textContent);
@@ -234,6 +235,16 @@
     }
   }
 
+  function writeStoredPreferences(prefs) {
+    // Some browsers (e.g. Safari Private Browsing) throw on writes — don't
+    // let that trap the user with a modal that can't be dismissed.
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    } catch (err) {
+      /* best-effort: preference just won't persist across reloads */
+    }
+  }
+
   function applyPreferences(prefs) {
     selectActivityChip(prefs.activity || "all");
     locationFilterEl.value = prefs.location || "";
@@ -254,7 +265,7 @@
   preferencesBtn.addEventListener("click", openPreferencesModal);
 
   prefSkipBtn.addEventListener("click", () => {
-    localStorage.setItem(PREFS_KEY, JSON.stringify({ skipped: true }));
+    writeStoredPreferences({ skipped: true });
     closePreferencesModal();
   });
 
@@ -264,10 +275,20 @@
       location: getRadioGroupValue("pref-location"),
       openOnly: prefOpenOnlyEl.checked,
     };
-    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    writeStoredPreferences(prefs);
     applyPreferences(prefs);
     closePreferencesModal();
     render();
+  });
+
+  // Always leave a way out, regardless of anything above: the ✕ button,
+  // clicking the backdrop, or pressing Escape.
+  prefCloseBtn.addEventListener("click", closePreferencesModal);
+  preferencesModal.addEventListener("click", (e) => {
+    if (e.target === preferencesModal) closePreferencesModal();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !preferencesModal.hidden) closePreferencesModal();
   });
 
   lastUpdatedEl.textContent = formatFetchedAt(Number(lastUpdatedEl.dataset.fetchedAt));
