@@ -10,6 +10,13 @@
   const keywordFilterEl = document.getElementById("keyword-filter");
   const openOnlyFilterEl = document.getElementById("open-only-filter");
 
+  const preferencesBtn = document.getElementById("preferences-btn");
+  const preferencesModal = document.getElementById("preferences-modal");
+  const prefOpenOnlyEl = document.getElementById("pref-open-only");
+  const prefSaveBtn = document.getElementById("pref-save-btn");
+  const prefSkipBtn = document.getElementById("pref-skip-btn");
+  const PREFS_KEY = "activityDashboardPreferences";
+
   let allEvents = JSON.parse(document.getElementById("events-data").textContent);
   let activeActivity = "all";
 
@@ -109,7 +116,7 @@
       badgeEl.href = ev.detail_url;
       badgeEl.target = "_blank";
       badgeEl.rel = "noopener noreferrer";
-      badgeEl.title = "Opens the official City of Coquitlam registration page in a new tab";
+      badgeEl.title = `Opens the official ${ev.source_name} registration page in a new tab`;
     }
     statusCol.appendChild(badgeEl);
     card.appendChild(statusCol);
@@ -166,12 +173,17 @@
     emptyStateEl.hidden = renderedAny;
   }
 
+  function selectActivityChip(value) {
+    activeActivity = value;
+    activityFiltersEl.querySelectorAll(".chip").forEach((c) => {
+      c.classList.toggle("active", c.dataset.activity === value);
+    });
+  }
+
   activityFiltersEl.addEventListener("click", (e) => {
     const btn = e.target.closest("button[data-activity]");
     if (!btn) return;
-    activeActivity = btn.dataset.activity;
-    activityFiltersEl.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
-    btn.classList.add("active");
+    selectActivityChip(btn.dataset.activity);
     render();
   });
 
@@ -196,6 +208,76 @@
     }
   });
 
+  function setRadioGroupValue(name, value) {
+    const radios = preferencesModal.querySelectorAll(`input[name="${name}"]`);
+    let matched = false;
+    radios.forEach((r) => {
+      if (r.value === value) {
+        r.checked = true;
+        matched = true;
+      }
+    });
+    if (!matched && radios.length) radios[0].checked = true;
+  }
+
+  function getRadioGroupValue(name) {
+    const checked = preferencesModal.querySelector(`input[name="${name}"]:checked`);
+    return checked ? checked.value : "";
+  }
+
+  function readStoredPreferences() {
+    try {
+      const raw = localStorage.getItem(PREFS_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  function applyPreferences(prefs) {
+    selectActivityChip(prefs.activity || "all");
+    locationFilterEl.value = prefs.location || "";
+    openOnlyFilterEl.checked = !!prefs.openOnly;
+  }
+
+  function openPreferencesModal() {
+    setRadioGroupValue("pref-activity", activeActivity);
+    setRadioGroupValue("pref-location", locationFilterEl.value);
+    prefOpenOnlyEl.checked = openOnlyFilterEl.checked;
+    preferencesModal.hidden = false;
+  }
+
+  function closePreferencesModal() {
+    preferencesModal.hidden = true;
+  }
+
+  preferencesBtn.addEventListener("click", openPreferencesModal);
+
+  prefSkipBtn.addEventListener("click", () => {
+    localStorage.setItem(PREFS_KEY, JSON.stringify({ skipped: true }));
+    closePreferencesModal();
+  });
+
+  prefSaveBtn.addEventListener("click", () => {
+    const prefs = {
+      activity: getRadioGroupValue("pref-activity"),
+      location: getRadioGroupValue("pref-location"),
+      openOnly: prefOpenOnlyEl.checked,
+    };
+    localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
+    applyPreferences(prefs);
+    closePreferencesModal();
+    render();
+  });
+
   lastUpdatedEl.textContent = formatFetchedAt(Number(lastUpdatedEl.dataset.fetchedAt));
+
+  const storedPrefs = readStoredPreferences();
+  if (storedPrefs && !storedPrefs.skipped) {
+    applyPreferences(storedPrefs);
+  } else if (!storedPrefs) {
+    openPreferencesModal();
+  }
+
   render();
 })();

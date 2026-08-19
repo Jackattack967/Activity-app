@@ -25,6 +25,7 @@
       Log in ({{ link.name.replace('City of ', '') }}) ↗
     </a>
     {% endfor %}
+    <button id="preferences-btn" type="button" title="Choose your default activity, location, and spots filter">⚙ Preferences</button>
     <button id="refresh-btn" type="button">Refresh</button>
   </div>
 </header>
@@ -64,6 +65,38 @@
   <p class="empty-state" id="empty-state" hidden>No activities match your filters.</p>
   <div id="day-groups"></div>
 </main>
+
+<div class="modal-overlay" id="preferences-modal" hidden>
+  <div class="modal-card" role="dialog" aria-labelledby="preferences-title">
+    <h2 id="preferences-title">What do you like to do?</h2>
+    <p class="modal-sub">Pick your defaults — you can always change filters afterward, and revisit this anytime with the Preferences button.</p>
+
+    <fieldset class="modal-fieldset">
+      <legend>Activity</legend>
+      <label><input type="radio" name="pref-activity" value="all" checked> All activities</label>
+      {% for a in activity_types %}
+      <label><input type="radio" name="pref-activity" value="{{ a }}"> {{ a }}</label>
+      {% endfor %}
+    </fieldset>
+
+    <fieldset class="modal-fieldset">
+      <legend>Location</legend>
+      <label><input type="radio" name="pref-location" value="" checked> All locations</label>
+      {% for loc in locations %}
+      <label><input type="radio" name="pref-location" value="{{ loc }}"> {{ loc }}</label>
+      {% endfor %}
+    </fieldset>
+
+    <label class="modal-checkbox">
+      <input type="checkbox" id="pref-open-only"> Only show activities with open spots by default
+    </label>
+
+    <div class="modal-actions">
+      <button id="pref-skip-btn" type="button" class="btn-secondary">Skip for now</button>
+      <button id="pref-save-btn" type="button" class="btn-primary">Save preferences</button>
+    </div>
+  </div>
+</div>
 
 <footer>
   <p>Sources: {{ source_names|join(', ') }} (PerfectMind public schedule widgets) &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>

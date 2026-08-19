@@ -56,7 +56,7 @@ body {
   text-decoration: underline;
 }
 
-#refresh-btn {
+#refresh-btn, #preferences-btn {
   background: var(--brand);
   color: white;
   border: none;
@@ -65,8 +65,14 @@ body {
   font-size: 0.85rem;
   cursor: pointer;
 }
-#refresh-btn:hover { background: var(--brand-dark); }
+#refresh-btn:hover, #preferences-btn:hover { background: var(--brand-dark); }
 #refresh-btn:disabled { opacity: 0.6; cursor: default; }
+#preferences-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+#preferences-btn:hover { background: var(--gray-bg); }
 
 .banner {
   margin: 1rem 1.5rem 0;
@@ -247,3 +253,94 @@ footer {
   }
   .event-status { text-align: left; }
 }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  z-index: 100;
+}
+
+.modal-card {
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-card h2 {
+  margin: 0 0 0.4rem;
+  font-size: 1.2rem;
+}
+
+.modal-sub {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin: 0 0 1.25rem;
+}
+
+.modal-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.9rem 0.8rem;
+  margin: 0 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.modal-fieldset legend {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 0.3rem;
+}
+
+.modal-fieldset label {
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.modal-checkbox {
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.btn-primary, .btn-secondary {
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: none;
+}
+
+.btn-primary {
+  background: var(--brand);
+  color: white;
+}
+.btn-primary:hover { background: var(--brand-dark); }
+
+.btn-secondary {
+  background: var(--gray-bg);
+  color: var(--text);
+}
+.btn-secondary:hover { background: var(--border); }
