@@ -267,6 +267,13 @@ footer {
      clicks meant for the modal's own buttons. */
   z-index: 2147483647;
 }
+/* Author styles beat the browser's built-in `[hidden] { display: none }`
+   rule regardless of specificity or order, so `.modal-overlay`'s own
+   `display: flex` above was silently winning — setting `.hidden = true`
+   in JS never actually hid the element on screen. This wins that fight. */
+.modal-overlay[hidden] {
+  display: none;
+}
 
 .modal-card {
   background: var(--surface);
