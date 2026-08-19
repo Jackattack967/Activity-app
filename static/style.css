@@ -56,6 +56,36 @@ body {
   text-decoration: underline;
 }
 
+.google-signin-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.google-signin-btn:hover {
+  background: var(--gray-bg);
+}
+
+.account-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.account-avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
 #refresh-btn, #preferences-btn {
   background: var(--brand);
   color: white;
@@ -190,6 +220,24 @@ main {
   font-size: 0.98rem;
 }
 
+.favorite-btn {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--border);
+  padding: 0;
+  order: -1;
+}
+.favorite-btn.favorited {
+  color: #f5a623;
+}
+.favorite-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .activity-tag {
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -217,7 +265,26 @@ main {
   font-style: italic;
 }
 
-.event-status { text-align: right; }
+.event-status {
+  text-align: right;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+.register-btn {
+  display: inline-block;
+  background: var(--brand);
+  color: white;
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.35rem 0.7rem;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.register-btn:hover { background: var(--brand-dark); }
 
 .badge {
   display: inline-block;
@@ -251,7 +318,12 @@ footer {
     grid-template-columns: 1fr;
     gap: 0.35rem;
   }
-  .event-status { text-align: left; }
+  .event-status {
+    text-align: left;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+  }
 }
 
 .modal-overlay {

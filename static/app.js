@@ -38,6 +38,7 @@
     const locationFilterEl = document.getElementById("location-filter");
     const keywordFilterEl = document.getElementById("keyword-filter");
     const openOnlyFilterEl = document.getElementById("open-only-filter");
+    const favoritesOnlyFilterEl = document.getElementById("favorites-only-filter");
 
     const preferencesBtn = document.getElementById("preferences-btn");
     const prefOpenOnlyEl = document.getElementById("pref-open-only");
@@ -50,6 +51,12 @@
       allEvents = JSON.parse(document.getElementById("events-data").textContent);
     } catch (err) {
       console.error("Could not parse events data:", err);
+    }
+    let loggedIn = false;
+    try {
+      loggedIn = !!JSON.parse(document.getElementById("user-data").textContent).loggedIn;
+    } catch (err) {
+      console.error("Could not parse user data:", err);
     }
     let activeActivity = "all";
 
@@ -89,6 +96,39 @@
       return `${dayOfWeek}, ${monthDay}`;
     }
 
+    function buildFavoriteButton(ev) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "favorite-btn" + (ev.is_favorited ? " favorited" : "");
+      btn.textContent = ev.is_favorited ? "★" : "☆";
+      btn.title = ev.is_favorited ? "Remove from favorites" : "Add to favorites";
+      btn.addEventListener("click", async () => {
+        btn.disabled = true;
+        try {
+          const resp = await fetch("/api/favorites", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              source_name: ev.source_name,
+              course_id: ev.course_id,
+              event_name: ev.event_name,
+            }),
+          });
+          const data = await resp.json();
+          ev.is_favorited = !!data.favorited;
+          btn.textContent = ev.is_favorited ? "★" : "☆";
+          btn.title = ev.is_favorited ? "Remove from favorites" : "Add to favorites";
+          btn.classList.toggle("favorited", ev.is_favorited);
+          if (favoritesOnlyFilterEl && favoritesOnlyFilterEl.checked) render();
+        } catch (err) {
+          console.error("Failed to toggle favorite:", err);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+      return btn;
+    }
+
     function buildCard(ev) {
       const card = document.createElement("article");
       card.className = "event-card";
@@ -105,6 +145,10 @@
 
       const titleRow = document.createElement("div");
       titleRow.className = "event-title-row";
+
+      if (loggedIn && ev.source_name && ev.course_id) {
+        titleRow.appendChild(buildFavoriteButton(ev));
+      }
 
       const title = document.createElement("h3");
       title.textContent = ev.event_name || "Untitled activity";
@@ -141,17 +185,28 @@
 
       const statusCol = document.createElement("div");
       statusCol.className = "event-status";
+
+      // The badge is now purely a status indicator; the call to action is
+      // its own clearly-labelled button below it.
       const badge = badgeInfo(ev);
-      const badgeEl = document.createElement(ev.detail_url ? "a" : "span");
+      const badgeEl = document.createElement("span");
       badgeEl.className = "badge " + badge.cls;
       badgeEl.textContent = badge.text;
-      if (ev.detail_url) {
-        badgeEl.href = ev.detail_url;
-        badgeEl.target = "_blank";
-        badgeEl.rel = "noopener noreferrer";
-        badgeEl.title = `Opens the official ${ev.source_name} registration page in a new tab`;
-      }
       statusCol.appendChild(badgeEl);
+
+      if (ev.detail_url) {
+        const registerEl = document.createElement("a");
+        registerEl.className = "register-btn";
+        registerEl.textContent = badge.open ? "Register / Pay ↗" : "View details ↗";
+        registerEl.href = ev.detail_url;
+        registerEl.target = "_blank";
+        registerEl.rel = "noopener noreferrer";
+        registerEl.title =
+          `Opens this session's official ${ev.source_name} page in a new tab, ` +
+          "where registration and payment are handled by the city.";
+        statusCol.appendChild(registerEl);
+      }
+
       card.appendChild(statusCol);
 
       card._open = badge.open;
@@ -163,10 +218,13 @@
       const location = locationFilterEl.value;
       const openOnly = openOnlyFilterEl.checked;
 
+      const favoritesOnly = favoritesOnlyFilterEl ? favoritesOnlyFilterEl.checked : false;
+
       const filtered = allEvents.filter((ev) => {
         if (activeActivity !== "all" && ev.activity_type !== activeActivity) return false;
         if (location && ev.location !== location) return false;
         if (keyword && !ev.event_name.toLowerCase().includes(keyword)) return false;
+        if (favoritesOnly && !ev.is_favorited) return false;
         return true;
       });
 
@@ -223,6 +281,7 @@
     locationFilterEl.addEventListener("change", render);
     keywordFilterEl.addEventListener("input", render);
     openOnlyFilterEl.addEventListener("change", render);
+    if (favoritesOnlyFilterEl) favoritesOnlyFilterEl.addEventListener("change", render);
 
     refreshBtn.addEventListener("click", async () => {
       refreshBtn.disabled = true;
@@ -277,6 +336,29 @@
       }
     }
 
+    async function fetchAccountPreferences() {
+      try {
+        const resp = await fetch("/api/preferences");
+        if (!resp.ok) return null;
+        return await resp.json();
+      } catch (err) {
+        console.error("Failed to load account preferences:", err);
+        return null;
+      }
+    }
+
+    async function saveAccountPreferences(prefs) {
+      try {
+        await fetch("/api/preferences", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(prefs),
+        });
+      } catch (err) {
+        console.error("Failed to save account preferences:", err);
+      }
+    }
+
     function applyPreferences(prefs) {
       selectActivityChip(prefs.activity || "all");
       locationFilterEl.value = prefs.location || "";
@@ -294,20 +376,28 @@
 
     prefSkipBtn.addEventListener("click", () => {
       try {
-        writeStoredPreferences({ skipped: true });
+        // Account-side "skip" isn't persisted server-side (no extra schema
+        // for it) — logged-in users who skip just get asked again next
+        // visit until they save. Anonymous users get the localStorage flag
+        // so they aren't nagged every time.
+        if (!loggedIn) writeStoredPreferences({ skipped: true });
       } finally {
         closePreferencesModal();
       }
     });
 
-    prefSaveBtn.addEventListener("click", () => {
+    prefSaveBtn.addEventListener("click", async () => {
       try {
         const prefs = {
           activity: getRadioGroupValue("pref-activity"),
           location: getRadioGroupValue("pref-location"),
           openOnly: prefOpenOnlyEl.checked,
         };
-        writeStoredPreferences(prefs);
+        if (loggedIn) {
+          await saveAccountPreferences(prefs);
+        } else {
+          writeStoredPreferences(prefs);
+        }
         applyPreferences(prefs);
         render();
       } catch (err) {
@@ -319,13 +409,21 @@
 
     lastUpdatedEl.textContent = formatFetchedAt(Number(lastUpdatedEl.dataset.fetchedAt));
 
-    const storedPrefs = readStoredPreferences();
-    if (storedPrefs && !storedPrefs.skipped) {
-      applyPreferences(storedPrefs);
-    } else if (!storedPrefs) {
-      openPreferencesModal();
-    }
-
-    render();
+    (async () => {
+      try {
+        const storedPrefs = loggedIn
+          ? await fetchAccountPreferences()
+          : readStoredPreferences();
+        if (storedPrefs && !storedPrefs.skipped) {
+          applyPreferences(storedPrefs);
+        } else if (!storedPrefs) {
+          openPreferencesModal();
+        }
+      } catch (err) {
+        console.error("Failed to load preferences:", err);
+      } finally {
+        render();
+      }
+    })();
   }
 })();

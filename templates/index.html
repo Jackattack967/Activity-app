@@ -27,6 +27,15 @@
     {% endfor %}
     <button id="preferences-btn" type="button" title="Choose your default activity, location, and spots filter">⚙ Preferences</button>
     <button id="refresh-btn" type="button">Refresh</button>
+    {% if logged_in %}
+    <span class="account-badge" title="{{ current_user_name }}">
+      {% if current_user_picture %}<img src="{{ current_user_picture }}" alt="" class="account-avatar">{% endif %}
+      {{ current_user_name }}
+    </span>
+    <a class="login-link" href="{{ url_for('auth.logout') }}">Log out</a>
+    {% else %}
+    <a class="google-signin-btn" href="{{ url_for('auth.login_google') }}">Sign in with Google</a>
+    {% endif %}
   </div>
 </header>
 
@@ -58,6 +67,11 @@
     <label class="open-only-label">
       <input type="checkbox" id="open-only-filter"> Open spots only
     </label>
+    {% if logged_in %}
+    <label class="open-only-label">
+      <input type="checkbox" id="favorites-only-filter"> ★ Favorites only
+    </label>
+    {% endif %}
   </div>
 </div>
 
@@ -106,6 +120,7 @@
 </footer>
 
 <script id="events-data" type="application/json">{{ events | tojson }}</script>
+<script id="user-data" type="application/json">{{ {"loggedIn": logged_in} | tojson }}</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script>
   if ("serviceWorker" in navigator) {

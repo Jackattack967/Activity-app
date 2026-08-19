@@ -14,3 +14,13 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.10
+      # These are secrets — sync:false means Render will prompt you to enter
+      # them once in the dashboard rather than storing them in this file.
+      - key: DATABASE_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false
