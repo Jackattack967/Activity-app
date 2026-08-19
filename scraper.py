@@ -16,15 +16,20 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import re
-from dataclasses import dataclass, field
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
-TOKEN_RE = re.compile(
-    r'name="__RequestVerificationToken"[^>]*value="([^"]+)"'
-)
+# Matches the whole <input> tag first, then pulls value= out of it, so this
+# doesn't break if the portal ever reorders the tag's attributes.
+TOKEN_TAG_RE = re.compile(r'<input[^>]*name="__RequestVerificationToken"[^>]*>')
+VALUE_ATTR_RE = re.compile(r'value="([^"]*)"')
 
 USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -32,6 +37,22 @@ USER_AGENT = (
 )
 
 MAX_PAGES = 5  # safety cap on "load more" pagination per calendar
+
+DEFAULT_TIMEZONE = "America/Vancouver"
+
+
+def _build_session() -> requests.Session:
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        backoff_factor=1,
+        status_forcelist=[500, 502, 503, 504],
+        allowed_methods=["GET", "POST"],
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
 
 
 @dataclass
@@ -60,13 +81,14 @@ def _get_session_and_token(session: requests.Session, source: dict) -> str:
     )
     resp = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=20)
     resp.raise_for_status()
-    match = TOKEN_RE.search(resp.text)
-    if not match:
+    tag_match = TOKEN_TAG_RE.search(resp.text)
+    value_match = VALUE_ATTR_RE.search(tag_match.group(0)) if tag_match else None
+    if not value_match:
         raise RuntimeError(
             f"Could not find anti-forgery token on {url}; the portal's page "
             "structure may have changed."
         )
-    return match.group(1)
+    return value_match.group(1)
 
 
 def _fetch_classes_page(
@@ -142,10 +164,15 @@ def fetch_calendar_events(
     source: dict, days_ahead: int
 ) -> list[Event]:
     """Fetch and normalize events for a single calendar source."""
-    date_from = dt.datetime.utcnow()
+    # Use the venue's local calendar date, not the scraping server's (Render
+    # isn't necessarily in Pacific time) and not UTC — otherwise "today"
+    # can silently shift by a day depending on where/when this runs.
+    tz = ZoneInfo(source.get("timezone", DEFAULT_TIMEZONE))
+    today_local = dt.datetime.now(tz).date()
+    date_from = dt.datetime.combine(today_local, dt.time.min)
     date_to = date_from + dt.timedelta(days=days_ahead)
 
-    session = requests.Session()
+    session = _build_session()
     token = _get_session_and_token(session, source)
 
     events: list[Event] = []
@@ -169,26 +196,42 @@ def fetch_calendar_events(
 
         if new_count == 0:
             break  # this page was all duplicates; nothing more to gain
+    else:
+        logger.warning(
+            "Hit the %d-page pagination cap for %s / %s — some events may "
+            "have been left out. Consider raising MAX_PAGES.",
+            MAX_PAGES,
+            source["source_name"],
+            source["calendar_label"],
+        )
 
     return events
 
 
 def fetch_all_events(sources: list[dict], days_ahead: int) -> tuple[list[Event], list[str]]:
-    """Fetch events for every configured source.
+    """Fetch events for every configured source, in parallel.
 
     Returns (events, errors). A failure on one source does not prevent the
-    others from being returned.
+    others from being returned. Error messages returned here are shown on
+    the public dashboard, so they're deliberately generic — full details
+    (exception, traceback) go to the server log instead.
     """
     all_events: list[Event] = []
     errors: list[str] = []
 
-    for source in sources:
-        try:
-            all_events.extend(fetch_calendar_events(source, days_ahead))
-        except Exception as exc:  # noqa: BLE001 - surface any scrape failure, keep going
+    with ThreadPoolExecutor(max_workers=min(len(sources), 5) or 1) as pool:
+        future_to_source = {
+            pool.submit(fetch_calendar_events, source, days_ahead): source
+            for source in sources
+        }
+        for future in as_completed(future_to_source):
+            source = future_to_source[future]
             label = f"{source['source_name']} / {source['calendar_label']}"
-            logger.exception("Failed to fetch %s", label)
-            errors.append(f"{label}: {exc}")
+            try:
+                all_events.extend(future.result())
+            except Exception:  # noqa: BLE001 - surface any scrape failure, keep going
+                logger.exception("Failed to fetch %s", label)
+                errors.append(f"{label}: temporarily unavailable")
 
     all_events.sort(key=lambda e: (e.date, e.start_time))
     return all_events, errors

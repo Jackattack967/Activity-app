@@ -12,6 +12,11 @@
 #        https://<subdomain>.perfectmind.com/<org_id>/Clients/BookMe4BookingPages/Classes
 #          ?calendarId=<CALENDAR_ID>&widgetId=<WIDGET_ID>&embed=False
 #      Copy base_url, org_id, calendar_id and widget_id from that URL.
+#
+# "timezone" is optional per source (IANA name, e.g. "America/Vancouver") and
+# defaults to America/Vancouver if omitted — it's used to compute "today" for
+# the schedule's date range in the venue's own local time, not the scraping
+# server's. Only add it explicitly for a source outside that timezone.
 
 SOURCES = [
     {

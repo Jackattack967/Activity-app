@@ -1,3 +1,4 @@
 flask>=3.0
 requests>=2.31
 gunicorn>=22.0
+tzdata>=2024.1
