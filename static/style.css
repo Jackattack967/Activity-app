@@ -46,6 +46,16 @@ body {
   color: var(--text-muted);
 }
 
+.login-link {
+  color: var(--brand);
+  text-decoration: none;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.login-link:hover {
+  text-decoration: underline;
+}
+
 #refresh-btn {
   background: var(--brand);
   color: white;

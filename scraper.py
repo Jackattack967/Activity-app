@@ -18,6 +18,7 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from urllib.parse import quote
 from zoneinfo import ZoneInfo
 
 import requests
@@ -73,6 +74,20 @@ class Event:
     course_id: str = ""
     details: str = ""
     detail_url: str = ""
+
+
+def build_login_url(source: dict) -> str:
+    """URL for the portal's own official sign-in page.
+
+    We never touch credentials ourselves — this just sends the user to log
+    in directly on the city's real site, in their own browser, so their
+    session there is already active when they click a "Register" link.
+    """
+    widget_url = f"{source['base_url']}/{source['org_id']}/Clients/BookMe4?widgetId={source['widget_id']}"
+    return (
+        f"{source['base_url']}/{source['org_id']}/MemberRegistration/MemberSignIn"
+        f"?returnUrl={quote(widget_url, safe='')}"
+    )
 
 
 def _get_session_and_token(session: requests.Session, source: dict) -> str:

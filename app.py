@@ -39,6 +39,7 @@ def index():
     data = _get_events()
     activity_types = sorted({e["activity_type"] for e in data["events"]})
     locations = sorted({e["location"] for e in data["events"] if e["location"]})
+    login_url = scraper.build_login_url(config.SOURCES[0]) if config.SOURCES else None
     return render_template(
         "index.html",
         events=data["events"],
@@ -47,6 +48,7 @@ def index():
         activity_types=activity_types,
         locations=locations,
         window_days=config.SCHEDULE_WINDOW_DAYS,
+        login_url=login_url,
     )
 
 

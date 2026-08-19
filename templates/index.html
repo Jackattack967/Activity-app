@@ -19,6 +19,12 @@
   <h1>Activity Schedule Dashboard</h1>
   <div class="topbar-meta">
     <span id="last-updated" data-fetched-at="{{ fetched_at }}">Loading…</span>
+    {% if login_url %}
+    <a class="login-link" href="{{ login_url }}" target="_blank" rel="noopener noreferrer"
+       title="Opens the City of Coquitlam's official sign-in page in a new tab">
+      Log in on city site ↗
+    </a>
+    {% endif %}
     <button id="refresh-btn" type="button">Refresh</button>
   </div>
 </header>
