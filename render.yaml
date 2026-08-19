@@ -1,0 +1,16 @@
+# Render Blueprint — lets Render configure this service automatically
+# from repo contents instead of you clicking through dashboard settings.
+# See: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: activity-schedule-dashboard
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    # One worker: this app keeps its schedule cache in memory, so a
+    # single worker keeps that cache coherent and avoids re-scraping
+    # the source portal redundantly across processes.
+    startCommand: gunicorn app:app --workers 1 --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10

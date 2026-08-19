@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Activity Schedule Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+<link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+<link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Activities">
+</head>
+<body>
+<header class="topbar">
+  <h1>Activity Schedule Dashboard</h1>
+  <div class="topbar-meta">
+    <span id="last-updated" data-fetched-at="{{ fetched_at }}">Loading…</span>
+    <button id="refresh-btn" type="button">Refresh</button>
+  </div>
+</header>
+
+{% if errors %}
+<div class="banner banner-error">
+  <strong>Some sources failed to load:</strong>
+  <ul>
+    {% for err in errors %}<li>{{ err }}</li>{% endfor %}
+  </ul>
+</div>
+{% endif %}
+
+<div class="filters">
+  <div class="filter-group" id="activity-filters">
+    <button class="chip active" data-activity="all" type="button">All activities</button>
+    {% for a in activity_types %}
+    <button class="chip" data-activity="{{ a }}" type="button">{{ a }}</button>
+    {% endfor %}
+  </div>
+
+  <div class="filter-group">
+    <select id="location-filter">
+      <option value="">All locations</option>
+      {% for loc in locations %}
+      <option value="{{ loc }}">{{ loc }}</option>
+      {% endfor %}
+    </select>
+    <input id="keyword-filter" type="search" placeholder="Search by activity name…">
+    <label class="open-only-label">
+      <input type="checkbox" id="open-only-filter"> Open spots only
+    </label>
+  </div>
+</div>
+
+<main id="schedule-root">
+  <p class="empty-state" id="empty-state" hidden>No activities match your filters.</p>
+  <div id="day-groups"></div>
+</main>
+
+<footer>
+  <p>Source: {{ activity_types|length and 'City of Coquitlam (PerfectMind public schedule widget)' }} &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>
+</footer>
+
+<script id="events-data" type="application/json">{{ events | tojson }}</script>
+<script src="{{ url_for('static', filename='app.js') }}"></script>
+<script>
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}");
+  }
+</script>
+</body>
+</html>
