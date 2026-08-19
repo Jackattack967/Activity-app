@@ -102,9 +102,15 @@
     const statusCol = document.createElement("div");
     statusCol.className = "event-status";
     const badge = badgeInfo(ev);
-    const badgeEl = document.createElement("span");
+    const badgeEl = document.createElement(ev.detail_url ? "a" : "span");
     badgeEl.className = "badge " + badge.cls;
     badgeEl.textContent = badge.text;
+    if (ev.detail_url) {
+      badgeEl.href = ev.detail_url;
+      badgeEl.target = "_blank";
+      badgeEl.rel = "noopener noreferrer";
+      badgeEl.title = "Opens the official City of Coquitlam registration page in a new tab";
+    }
     statusCol.appendChild(badgeEl);
     card.appendChild(statusCol);
 

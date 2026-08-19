@@ -72,6 +72,7 @@ class Event:
     calendar_label: str
     course_id: str = ""
     details: str = ""
+    detail_url: str = ""
 
 
 def _get_session_and_token(session: requests.Session, source: dict) -> str:
@@ -141,6 +142,15 @@ def _normalize(raw: dict, source: dict) -> Event:
     if not status:
         status = "Closed" if not raw.get("Spots") else raw.get("Spots", "")
 
+    event_id = raw.get("EventId", "")
+    detail_url = (
+        f"{source['base_url']}/{source['org_id']}/Clients/BookMe4LandingPages/Class"
+        f"?widgetId={source['widget_id']}&redirectedFromEmbededMode=False"
+        f"&classId={event_id}&occurrenceDate={occurrence}"
+        if event_id and occurrence
+        else ""
+    )
+
     return Event(
         activity_type=source["activity_type"],
         event_name=raw.get("EventName", "").strip(),
@@ -157,6 +167,7 @@ def _normalize(raw: dict, source: dict) -> Event:
         calendar_label=source["calendar_label"],
         course_id=raw.get("CourseIdTrimmed", ""),
         details=(raw.get("Details") or "").strip(),
+        detail_url=detail_url,
     )
 
 

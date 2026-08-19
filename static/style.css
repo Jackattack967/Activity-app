@@ -210,6 +210,13 @@ main {
   padding: 0.25rem 0.6rem;
   border-radius: 999px;
   white-space: nowrap;
+  text-decoration: none;
+}
+a.badge {
+  cursor: pointer;
+}
+a.badge:hover {
+  filter: brightness(0.95);
 }
 .badge-open { background: var(--green-bg); color: var(--green); }
 .badge-full { background: var(--red-bg); color: var(--red); }
