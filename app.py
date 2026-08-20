@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # via `python app.py`, the .bat launcher, or gunicorn from anywhere.
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_login import current_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -153,6 +153,25 @@ def index():
         login_links=_login_links(),
         source_names=source_names,
     )
+
+
+@app.route("/sw.js")
+def service_worker():
+    """Serve the service worker from the site root.
+
+    A worker's scope defaults to the directory it is served from, so at
+    /static/sw.js it would only control /static/ — never this site's pages.
+    navigator.serviceWorker.ready would then never resolve on "/", which
+    breaks push subscription.
+    """
+    response = send_from_directory(
+        app.static_folder, "sw.js", mimetype="application/javascript"
+    )
+    response.headers["Service-Worker-Allowed"] = "/"
+    # The worker must be revalidated so push/notification changes reach
+    # browsers that already installed an older copy.
+    response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.route("/api/events")

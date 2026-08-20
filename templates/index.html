@@ -129,8 +129,14 @@
 <script id="user-data" type="application/json">{{ {"loggedIn": logged_in} | tojson }}</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script>
+  // Served from the site root, not /static/, so its scope covers the whole
+  // site. A worker at /static/sw.js only controls /static/, which means it
+  // never controls this page and navigator.serviceWorker.ready never
+  // resolves here — which silently broke push subscription.
   if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.register("{{ url_for('static', filename='sw.js') }}");
+    navigator.serviceWorker.register("/sw.js", { scope: "/" }).catch((err) => {
+      console.error("Service worker registration failed:", err);
+    });
   }
 </script>
 </body>
