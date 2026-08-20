@@ -281,9 +281,17 @@ def api_check_watches():
     if not ACCOUNTS_ENABLED:
         return jsonify({"error": "accounts disabled"}), 503
 
-    expected = os.environ.get("WATCH_CHECK_TOKEN")
-    supplied = request.args.get("token") or request.headers.get("X-Watch-Token")
-    if not expected or not secrets.compare_digest(supplied or "", expected):
+    # Strip whitespace on both sides: pasting env values into dashboards and
+    # cron UIs very easily picks up a stray space or newline, which would
+    # otherwise fail authentication for no visible reason.
+    expected = (os.environ.get("WATCH_CHECK_TOKEN") or "").strip()
+    supplied = (
+        request.args.get("token") or request.headers.get("X-Watch-Token") or ""
+    ).strip()
+    if not expected:
+        logger.error("WATCH_CHECK_TOKEN is not set — refusing to run watch check.")
+        return jsonify({"error": "watch checks not configured"}), 503
+    if not secrets.compare_digest(supplied, expected):
         return jsonify({"error": "invalid token"}), 403
 
     data = _get_events()
