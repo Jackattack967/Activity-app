@@ -420,7 +420,13 @@
         return reg.pushManager.getSubscription();
       }
 
+      // Tracked so the click handler knows synchronously whether it is turning
+      // alerts on or off — deciding that with an await would burn the click's
+      // user activation before we can request notification permission.
+      let isSubscribed = false;
+
       function paint(subscribed) {
+        isSubscribed = subscribed;
         alertsBtn.textContent = subscribed ? "🔔 Alerts on" : "🔔 Alerts off";
         alertsBtn.classList.toggle("alerts-on", subscribed);
         alertsBtn.title = subscribed
@@ -428,31 +434,74 @@
           : "Get notified when a spot opens in one of your starred activities.";
       }
 
+      function withTimeout(promise, ms, label) {
+        return Promise.race([
+          promise,
+          new Promise((_, reject) => setTimeout(() => reject(new Error(label)), ms)),
+        ]);
+      }
+
       // Attach the click handler BEFORE any await. Awaiting first would mean a
       // hung service worker prevents this listener from ever being attached,
       // leaving a button that looks fine and does nothing when clicked.
       alertsBtn.addEventListener("click", async () => {
+        // Turning alerts OFF needs no permission, so handle it separately.
+        if (isSubscribed) {
+          alertsBtn.disabled = true;
+          try {
+            const existing = await currentSubscription();
+            if (existing) {
+              await fetch("/api/push/unsubscribe", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ endpoint: existing.endpoint }),
+              });
+              await existing.unsubscribe();
+            }
+            paint(false);
+          } catch (err) {
+            console.error("Failed to turn alerts off:", err);
+            alertsBtn.textContent = "🔔 Alerts failed";
+            alertsBtn.title = "Couldn't turn alerts off: " + (err && err.message);
+          } finally {
+            alertsBtn.disabled = false;
+          }
+          return;
+        }
+
+        // Turning alerts ON: ask for permission FIRST, synchronously within
+        // the click. Browsers only honour a permission request while the
+        // click's transient user activation is still valid — awaiting
+        // anything first (e.g. the service worker) burns it, and the prompt
+        // then silently never appears.
+        if (Notification.permission === "denied") {
+          alertsBtn.title =
+            "Notifications are blocked for this site. Click the icon at the left " +
+            "of the address bar, set Notifications to Allow, then reload.";
+          alertsBtn.textContent = "🔔 Alerts blocked";
+          return;
+        }
+
+        let permissionPromise = null;
+        if (Notification.permission !== "granted") {
+          permissionPromise = Notification.requestPermission();
+        }
+
         alertsBtn.disabled = true;
         try {
-          const existing = await currentSubscription();
-
-          if (existing) {
-            await fetch("/api/push/unsubscribe", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ endpoint: existing.endpoint }),
-            });
-            await existing.unsubscribe();
-            paint(false);
-            return;
-          }
-
-          const permission = await Notification.requestPermission();
-          if (permission !== "granted") {
-            alertsBtn.title =
-              "Notifications are blocked for this site — enable them in your browser settings.";
-            paint(false);
-            return;
+          if (permissionPromise) {
+            const permission = await withTimeout(
+              permissionPromise,
+              120000,
+              "no response to the notification prompt"
+            );
+            if (permission !== "granted") {
+              alertsBtn.textContent = "🔔 Alerts blocked";
+              alertsBtn.title =
+                "Notification permission wasn't granted. Allow notifications for " +
+                "this site in your browser, then click again.";
+              return;
+            }
           }
 
           if (!vapidKey) throw new Error("missing VAPID public key");
