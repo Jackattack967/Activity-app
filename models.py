@@ -9,6 +9,21 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+# Columns added to tables that already exist in a deployed database.
+# db.create_all() only creates missing *tables*, never missing columns, so
+# new fields on an existing model need an explicit (idempotent) migration.
+_ADDITIVE_MIGRATIONS = (
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
+    "email_alerts BOOLEAN NOT NULL DEFAULT FALSE",
+)
+
+
+def ensure_schema() -> None:
+    """Apply additive schema changes. Safe to run on every startup."""
+    for statement in _ADDITIVE_MIGRATIONS:
+        db.session.execute(db.text(statement))
+    db.session.commit()
+
 
 class User(UserMixin, db.Model):
     __tablename__ = "users"
@@ -19,6 +34,8 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(255))
     picture_url = db.Column(db.String(500))
     created_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+    # Opt-in: alerts go out by push unless the user also asks for email.
+    email_alerts = db.Column(db.Boolean, nullable=False, default=False)
 
     preference = db.relationship(
         "Preference", backref="user", uselist=False, cascade="all, delete-orphan"

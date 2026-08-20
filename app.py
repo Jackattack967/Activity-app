@@ -25,7 +25,7 @@ import config
 import scraper
 import watcher
 from auth import auth_bp, init_auth
-from models import Favorite, Preference, PushSubscription, WatchRun, db
+from models import Favorite, Preference, PushSubscription, WatchRun, db, ensure_schema
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +67,7 @@ else:
         app.register_blueprint(auth_bp)
         with app.app_context():
             db.create_all()
+            ensure_schema()
         ACCOUNTS_ENABLED = True
     except Exception:
         logger.exception(
@@ -226,14 +227,21 @@ def api_preferences():
         pref.activity = body.get("activity") or "all"
         pref.location = body.get("location") or ""
         pref.open_only = bool(body.get("openOnly"))
+        if "emailAlerts" in body:
+            current_user.email_alerts = bool(body.get("emailAlerts"))
         db.session.commit()
         return jsonify({"ok": True})
 
     pref = current_user.preference
     if pref is None:
-        return jsonify(None)
+        return jsonify({"emailAlerts": bool(current_user.email_alerts)})
     return jsonify(
-        {"activity": pref.activity, "location": pref.location, "openOnly": pref.open_only}
+        {
+            "activity": pref.activity,
+            "location": pref.location,
+            "openOnly": pref.open_only,
+            "emailAlerts": bool(current_user.email_alerts),
+        }
     )
 
 
@@ -379,6 +387,7 @@ def inject_user():
         "current_user_picture": current_user.picture_url if logged_in else None,
         "vapid_public_key": os.environ.get("VAPID_PUBLIC_KEY", ""),
         "push_enabled": bool(os.environ.get("VAPID_PUBLIC_KEY")) and ACCOUNTS_ENABLED,
+        "email_alerts_available": bool(os.environ.get("RESEND_API_KEY")),
     }
 
 

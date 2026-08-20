@@ -114,6 +114,13 @@
       <input type="checkbox" id="pref-open-only"> Only show activities with open spots by default
     </label>
 
+    {% if logged_in and email_alerts_available %}
+    <label class="modal-checkbox">
+      <input type="checkbox" id="pref-email-alerts">
+      Also email me when a spot opens in a starred activity
+    </label>
+    {% endif %}
+
     <div class="modal-actions">
       <button id="pref-skip-btn" type="button" class="btn-secondary">Skip for now</button>
       <button id="pref-save-btn" type="button" class="btn-primary">Save preferences</button>

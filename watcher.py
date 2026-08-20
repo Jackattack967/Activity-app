@@ -16,10 +16,12 @@ does not blast out a backlog of notifications.
 from __future__ import annotations
 
 import datetime as dt
+import html
 import json
 import logging
 import os
 
+import requests
 from pywebpush import WebPushException, webpush
 
 from models import EventState, Favorite, PushSubscription, WatchRun, db
@@ -68,6 +70,56 @@ def send_push(subscription: PushSubscription, payload: dict) -> bool:
         return True
 
 
+def send_email(to_address: str, event: dict) -> bool:
+    """Email one 'a spot opened' alert via Resend. Best-effort: a mail
+    failure must never abort the watch run or block push delivery."""
+    api_key = os.environ.get("RESEND_API_KEY")
+    if not api_key:
+        return False
+
+    name = event.get("event_name", "Activity")
+    when = f"{event.get('day_of_week', '')} {event.get('start_time', '')}".strip()
+    where = event.get("facility") or event.get("location", "")
+    spots = event.get("spots") or "Open"
+    url = event.get("detail_url") or ""
+
+    body = f"""
+      <p><strong>{html.escape(name)}</strong> just opened up.</p>
+      <p>
+        {html.escape(when)}<br>
+        {html.escape(where)}<br>
+        {html.escape(spots)}
+      </p>
+      <p><a href="{html.escape(url)}">Register on the {html.escape(event.get('source_name', 'city'))} site &rarr;</a></p>
+      <p style="color:#6b7280;font-size:12px">
+        Spots go quickly — this link opens the city's official registration page.
+      </p>
+    """
+
+    try:
+        resp = requests.post(
+            "https://api.resend.com/emails",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "from": os.environ.get("ALERT_FROM_EMAIL", "onboarding@resend.dev"),
+                "to": [to_address],
+                "subject": f"Spot open: {name}",
+                "html": body,
+            },
+            timeout=15,
+        )
+        if resp.status_code >= 400:
+            logger.warning("Resend rejected the alert email: %s %s", resp.status_code, resp.text[:300])
+            return False
+        return True
+    except Exception:
+        logger.exception("Failed to send alert email")
+        return False
+
+
 def notify_user(user, event: dict) -> int:
     """Push an 'a spot opened' alert to every device a user has registered."""
     payload = {
@@ -86,6 +138,11 @@ def notify_user(user, event: dict) -> int:
             sent += 1
         else:
             db.session.delete(sub)
+
+    if getattr(user, "email_alerts", False) and user.email:
+        if send_email(user.email, event):
+            sent += 1
+
     return sent
 
 

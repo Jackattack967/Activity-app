@@ -44,6 +44,7 @@
     const prefOpenOnlyEl = document.getElementById("pref-open-only");
     const prefSaveBtn = document.getElementById("pref-save-btn");
     const prefSkipBtn = document.getElementById("pref-skip-btn");
+    const prefEmailAlertsEl = document.getElementById("pref-email-alerts");
     const PREFS_KEY = "activityDashboardPreferences";
 
     let allEvents = [];
@@ -372,10 +373,15 @@
       openOnlyFilterEl.checked = !!prefs.openOnly;
     }
 
+    // Email alerts are an account setting rather than a view filter, so it is
+    // kept out of applyPreferences (which only drives the visible filters).
+    let emailAlertsEnabled = false;
+
     function openPreferencesModal() {
       setRadioGroupValue("pref-activity", activeActivity);
       setRadioGroupValue("pref-location", locationFilterEl.value);
       prefOpenOnlyEl.checked = openOnlyFilterEl.checked;
+      if (prefEmailAlertsEl) prefEmailAlertsEl.checked = emailAlertsEnabled;
       preferencesModal.hidden = false;
     }
 
@@ -593,6 +599,10 @@
           location: getRadioGroupValue("pref-location"),
           openOnly: prefOpenOnlyEl.checked,
         };
+        if (prefEmailAlertsEl) {
+          emailAlertsEnabled = prefEmailAlertsEl.checked;
+          prefs.emailAlerts = emailAlertsEnabled;
+        }
         if (loggedIn) {
           await saveAccountPreferences(prefs);
         } else {
@@ -617,10 +627,17 @@
         const storedPrefs = loggedIn
           ? await fetchAccountPreferences()
           : readStoredPreferences();
-        if (storedPrefs && !storedPrefs.skipped) {
+        if (storedPrefs && typeof storedPrefs.emailAlerts === "boolean") {
+          emailAlertsEnabled = storedPrefs.emailAlerts;
+        }
+        // A stored record holding only the email-alert flag means the filter
+        // preferences were never set, so still prompt for those.
+        const hasFilterPrefs =
+          storedPrefs && ("activity" in storedPrefs || "location" in storedPrefs);
+        if (hasFilterPrefs && !storedPrefs.skipped) {
           applyPreferences(storedPrefs);
-        } else if (!storedPrefs) {
-          openPreferencesModal();
+        } else if (!storedPrefs || !hasFilterPrefs) {
+          if (!(storedPrefs && storedPrefs.skipped)) openPreferencesModal();
         }
       } catch (err) {
         console.error("Failed to load preferences:", err);
