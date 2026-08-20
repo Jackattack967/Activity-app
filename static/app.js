@@ -386,6 +386,37 @@
       return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
     }
 
+    async function showWatchStatus() {
+      const el = document.getElementById("watch-status");
+      if (!el) return;
+      try {
+        const resp = await fetch("/api/watch-status");
+        const s = await resp.json();
+
+        if (!s.configured) {
+          el.textContent = "Alert watcher: not configured.";
+          return;
+        }
+        if (!s.last_run) {
+          el.textContent =
+            "Alert watcher: never run yet — the scheduled job isn't calling it.";
+          el.classList.add("watch-status-bad");
+          return;
+        }
+
+        const mins = Math.round(s.seconds_ago / 60);
+        const ago =
+          mins < 1 ? "less than a minute ago" : mins === 1 ? "1 minute ago" : `${mins} minutes ago`;
+        el.textContent = s.healthy
+          ? `Alert watcher: last checked ${ago} (${s.checked} sessions tracked).`
+          : `Alert watcher: last checked ${ago} — that's overdue, the scheduled job may have stopped.`;
+        el.classList.toggle("watch-status-bad", !s.healthy);
+      } catch (err) {
+        console.error("Could not load watch status:", err);
+        el.textContent = "";
+      }
+    }
+
     function setUpAlertsButton() {
       const alertsBtn = document.getElementById("alerts-btn");
       if (!alertsBtn) return;
@@ -577,6 +608,7 @@
     });
 
     setUpAlertsButton();
+    showWatchStatus();
 
     lastUpdatedEl.textContent = formatFetchedAt(Number(lastUpdatedEl.dataset.fetchedAt));
 

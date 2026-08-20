@@ -22,7 +22,7 @@ import os
 
 from pywebpush import WebPushException, webpush
 
-from models import EventState, Favorite, PushSubscription, db
+from models import EventState, Favorite, PushSubscription, WatchRun, db
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +42,7 @@ def is_open(event: dict) -> bool:
     return status == "Register"
 
 
-def _send_push(subscription: PushSubscription, payload: dict) -> bool:
+def send_push(subscription: PushSubscription, payload: dict) -> bool:
     """Returns False if the subscription is dead and should be removed."""
     try:
         webpush(
@@ -82,7 +82,7 @@ def notify_user(user, event: dict) -> int:
 
     sent = 0
     for sub in list(user.push_subscriptions):
-        if _send_push(sub, payload):
+        if send_push(sub, payload):
             sent += 1
         else:
             db.session.delete(sub)
@@ -147,6 +147,15 @@ def check_watches(events: list[dict]) -> dict:
     # Occurrences in the past can never re-open; drop them so the table does
     # not grow without bound.
     EventState.query.filter(EventState.date < today).delete(synchronize_session=False)
+
+    # Heartbeat: a single row, overwritten each run, so the dashboard can show
+    # whether the scheduler is actually calling us.
+    run = WatchRun.query.get(1) or WatchRun(id=1)
+    run.ran_at = dt.datetime.utcnow()
+    run.checked = checked
+    run.transitions = transitions
+    run.notifications_sent = notifications
+    db.session.add(run)
 
     db.session.commit()
 

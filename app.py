@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
+import datetime as dt
 import logging
 import os
 import secrets
@@ -24,7 +25,7 @@ import config
 import scraper
 import watcher
 from auth import auth_bp, init_auth
-from models import Favorite, Preference, PushSubscription, db
+from models import Favorite, Preference, PushSubscription, WatchRun, db
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +156,36 @@ def index():
     )
 
 
+@app.route("/api/watch-status")
+def api_watch_status():
+    """Is the external scheduler actually calling /api/check-watches?
+
+    Public and read-only: it exposes only whether the watcher ran and its
+    aggregate counts, never anything about who is watching what.
+    """
+    if not ACCOUNTS_ENABLED:
+        return jsonify({"configured": False, "last_run": None})
+
+    run = WatchRun.query.get(1)
+    if run is None or run.ran_at is None:
+        return jsonify({"configured": True, "last_run": None})
+
+    age = (dt.datetime.utcnow() - run.ran_at).total_seconds()
+    return jsonify(
+        {
+            "configured": True,
+            "last_run": run.ran_at.isoformat() + "Z",
+            "seconds_ago": int(age),
+            "checked": run.checked,
+            "transitions": run.transitions,
+            "notifications_sent": run.notifications_sent,
+            # The scheduler is meant to run every 5 min; allow generous slack
+            # for cold starts before calling it stalled.
+            "healthy": age < 30 * 60,
+        }
+    )
+
+
 @app.route("/sw.js")
 def service_worker():
     """Serve the service worker from the site root.
@@ -276,7 +307,22 @@ def api_push_subscribe():
             )
         )
     db.session.commit()
-    return jsonify({"ok": True})
+
+    # Confirmation push: proves the whole delivery path works end to end at
+    # the moment of setup, rather than leaving the user to wonder until a
+    # spot happens to open days later.
+    sub = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    delivered = False
+    if sub is not None:
+        delivered = watcher.send_push(
+            sub,
+            {
+                "title": "Alerts are on",
+                "body": "You'll get a notification here when a spot opens in a starred activity.",
+                "url": "/",
+            },
+        )
+    return jsonify({"ok": True, "test_notification_delivered": delivered})
 
 
 @app.route("/api/push/unsubscribe", methods=["POST"])

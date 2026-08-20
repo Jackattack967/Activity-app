@@ -84,6 +84,22 @@ class EventState(db.Model):
     )
 
 
+class WatchRun(db.Model):
+    """Heartbeat for the watcher: a single row, overwritten on every run.
+
+    Exists so "is my alerting actually running?" is answerable from the
+    dashboard itself, rather than from the external scheduler's logs.
+    """
+
+    __tablename__ = "watch_runs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    ran_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+    checked = db.Column(db.Integer, default=0)
+    transitions = db.Column(db.Integer, default=0)
+    notifications_sent = db.Column(db.Integer, default=0)
+
+
 class PushSubscription(db.Model):
     """A browser/PWA push endpoint belonging to a user. One user can have
     several (phone, laptop, ...)."""

@@ -338,6 +338,14 @@ footer {
   padding: 1rem 1.5rem 2rem;
 }
 
+.watch-status {
+  margin-top: 0.4rem;
+}
+.watch-status-bad {
+  color: var(--red);
+  font-weight: 600;
+}
+
 @media (max-width: 560px) {
   .event-card {
     grid-template-columns: 1fr;

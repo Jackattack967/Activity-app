@@ -123,6 +123,9 @@
 
 <footer>
   <p>Sources: {{ source_names|join(', ') }} (PerfectMind public schedule widgets) &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>
+  {% if accounts_enabled %}
+  <p id="watch-status" class="watch-status">Checking alert watcher…</p>
+  {% endif %}
 </footer>
 
 <script id="events-data" type="application/json">{{ events | tojson }}</script>
