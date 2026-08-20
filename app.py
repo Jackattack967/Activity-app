@@ -164,12 +164,19 @@ def api_watch_status():
     Public and read-only: it exposes only whether the watcher ran and its
     aggregate counts, never anything about who is watching what.
     """
+    # Whether each alert channel is configured server-side. Booleans about
+    # deployment config only — no keys, and nothing about any user.
+    channels = {
+        "push_configured": bool(os.environ.get("VAPID_PUBLIC_KEY")),
+        "email_configured": bool(os.environ.get("RESEND_API_KEY")),
+    }
+
     if not ACCOUNTS_ENABLED:
-        return jsonify({"configured": False, "last_run": None})
+        return jsonify({"configured": False, "last_run": None, **channels})
 
     run = WatchRun.query.get(1)
     if run is None or run.ran_at is None:
-        return jsonify({"configured": True, "last_run": None})
+        return jsonify({"configured": True, "last_run": None, **channels})
 
     age = (dt.datetime.utcnow() - run.ran_at).total_seconds()
     return jsonify(
@@ -183,6 +190,7 @@ def api_watch_status():
             # The scheduler is meant to run every 5 min; allow generous slack
             # for cold starts before calling it stalled.
             "healthy": age < 30 * 60,
+            **channels,
         }
     )
 
