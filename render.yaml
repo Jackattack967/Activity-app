@@ -38,3 +38,9 @@ services:
       # Shared secret the external scheduler presents to /api/check-watches.
       - key: WATCH_CHECK_TOKEN
         sync: false
+      # Email alerts (Resend). Optional: without these the feature stays
+      # hidden and inert, and push alerts are unaffected.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: ALERT_FROM_EMAIL
+        value: onboarding@resend.dev
