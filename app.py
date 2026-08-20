@@ -22,8 +22,9 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
 import scraper
+import watcher
 from auth import auth_bp, init_auth
-from models import Favorite, Preference, db
+from models import Favorite, Preference, PushSubscription, db
 
 logger = logging.getLogger(__name__)
 
@@ -226,6 +227,75 @@ def api_favorites():
     )
 
 
+@app.route("/api/push/subscribe", methods=["POST"])
+def api_push_subscribe():
+    if not _is_logged_in():
+        return jsonify({"error": "not authenticated"}), 401
+
+    body = request.get_json(force=True) or {}
+    endpoint = (body.get("endpoint") or "").strip()
+    keys = body.get("keys") or {}
+    p256dh = (keys.get("p256dh") or "").strip()
+    auth_key = (keys.get("auth") or "").strip()
+    if not endpoint or not p256dh or not auth_key:
+        return jsonify({"error": "endpoint and keys are required"}), 400
+
+    existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
+    if existing:
+        # Re-subscribing on a device that already registered: make sure it
+        # belongs to whoever is signed in now, and refresh the keys.
+        existing.user_id = current_user.id
+        existing.p256dh = p256dh
+        existing.auth = auth_key
+    else:
+        db.session.add(
+            PushSubscription(
+                user_id=current_user.id,
+                endpoint=endpoint,
+                p256dh=p256dh,
+                auth=auth_key,
+            )
+        )
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/push/unsubscribe", methods=["POST"])
+def api_push_unsubscribe():
+    if not _is_logged_in():
+        return jsonify({"error": "not authenticated"}), 401
+
+    body = request.get_json(force=True) or {}
+    endpoint = (body.get("endpoint") or "").strip()
+    PushSubscription.query.filter_by(
+        user_id=current_user.id, endpoint=endpoint
+    ).delete()
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/check-watches", methods=["GET", "POST"])
+def api_check_watches():
+    """Run one watch pass. Called by an external scheduler on a timer, since
+    the free Render tier sleeps and cannot poll itself."""
+    if not ACCOUNTS_ENABLED:
+        return jsonify({"error": "accounts disabled"}), 503
+
+    expected = os.environ.get("WATCH_CHECK_TOKEN")
+    supplied = request.args.get("token") or request.headers.get("X-Watch-Token")
+    if not expected or not secrets.compare_digest(supplied or "", expected):
+        return jsonify({"error": "invalid token"}), 403
+
+    data = _get_events()
+    try:
+        result = watcher.check_watches(data["events"])
+    except Exception:
+        logger.exception("Watch check failed")
+        db.session.rollback()
+        return jsonify({"error": "watch check failed"}), 500
+    return jsonify(result)
+
+
 @app.context_processor
 def inject_user():
     logged_in = _is_logged_in()
@@ -234,6 +304,8 @@ def inject_user():
         "logged_in": logged_in,
         "current_user_name": current_user.name if logged_in else None,
         "current_user_picture": current_user.picture_url if logged_in else None,
+        "vapid_public_key": os.environ.get("VAPID_PUBLIC_KEY", ""),
+        "push_enabled": bool(os.environ.get("VAPID_PUBLIC_KEY")) and ACCOUNTS_ENABLED,
     }
 
 

@@ -86,6 +86,24 @@ body {
   border-radius: 50%;
 }
 
+#alerts-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.45rem 0.9rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#alerts-btn:hover { background: var(--gray-bg); }
+#alerts-btn.alerts-on {
+  background: var(--green-bg);
+  color: var(--green);
+  border-color: var(--green-bg);
+}
+#alerts-btn:disabled { opacity: 0.6; cursor: default; }
+
 #refresh-btn, #preferences-btn {
   background: var(--brand);
   color: white;

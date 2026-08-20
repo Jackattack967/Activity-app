@@ -379,6 +379,93 @@
       preferencesModal.hidden = false;
     }
 
+    function urlBase64ToUint8Array(base64String) {
+      const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+      const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+      const raw = atob(base64);
+      return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
+    }
+
+    async function setUpAlertsButton() {
+      const alertsBtn = document.getElementById("alerts-btn");
+      if (!alertsBtn) return;
+
+      const supported =
+        "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+      if (!supported) {
+        alertsBtn.textContent = "🔔 Alerts unavailable";
+        alertsBtn.disabled = true;
+        alertsBtn.title = "This browser doesn't support push notifications.";
+        return;
+      }
+
+      const vapidKey = alertsBtn.dataset.vapidKey;
+
+      async function currentSubscription() {
+        const reg = await navigator.serviceWorker.ready;
+        return reg.pushManager.getSubscription();
+      }
+
+      function paint(subscribed) {
+        alertsBtn.textContent = subscribed ? "🔔 Alerts on" : "🔔 Alerts off";
+        alertsBtn.classList.toggle("alerts-on", subscribed);
+        alertsBtn.title = subscribed
+          ? "You'll be notified when a spot opens in a starred activity. Click to turn off."
+          : "Get notified when a spot opens in one of your starred activities.";
+      }
+
+      try {
+        paint(!!(await currentSubscription()));
+      } catch (err) {
+        console.error("Could not read push subscription:", err);
+      }
+
+      alertsBtn.addEventListener("click", async () => {
+        alertsBtn.disabled = true;
+        try {
+          const existing = await currentSubscription();
+
+          if (existing) {
+            await fetch("/api/push/unsubscribe", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ endpoint: existing.endpoint }),
+            });
+            await existing.unsubscribe();
+            paint(false);
+            return;
+          }
+
+          const permission = await Notification.requestPermission();
+          if (permission !== "granted") {
+            alertsBtn.title =
+              "Notifications are blocked for this site — enable them in your browser settings.";
+            paint(false);
+            return;
+          }
+
+          const reg = await navigator.serviceWorker.ready;
+          const sub = await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(vapidKey),
+          });
+
+          const resp = await fetch("/api/push/subscribe", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(sub.toJSON()),
+          });
+          if (!resp.ok) throw new Error("server rejected subscription");
+          paint(true);
+        } catch (err) {
+          console.error("Failed to toggle alerts:", err);
+          paint(false);
+        } finally {
+          alertsBtn.disabled = false;
+        }
+      });
+    }
+
     preferencesBtn.addEventListener("click", openPreferencesModal);
 
     prefSkipBtn.addEventListener("click", () => {
@@ -413,6 +500,8 @@
         closePreferencesModal();
       }
     });
+
+    setUpAlertsButton();
 
     lastUpdatedEl.textContent = formatFetchedAt(Number(lastUpdatedEl.dataset.fetchedAt));
 

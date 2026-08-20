@@ -26,6 +26,9 @@ class User(UserMixin, db.Model):
     favorites = db.relationship(
         "Favorite", backref="user", cascade="all, delete-orphan"
     )
+    push_subscriptions = db.relationship(
+        "PushSubscription", backref="user", cascade="all, delete-orphan"
+    )
 
 
 class Preference(db.Model):
@@ -57,3 +60,39 @@ class Favorite(db.Model):
             "user_id", "source_name", "course_id", name="uq_favorite_user_course"
         ),
     )
+
+
+class EventState(db.Model):
+    """Last-seen availability of a single occurrence, so the watcher can spot
+    a closed -> open transition. Stored once globally rather than per user:
+    availability is a property of the session, not of who is watching it.
+    """
+
+    __tablename__ = "event_states"
+
+    id = db.Column(db.Integer, primary_key=True)
+    source_name = db.Column(db.String(100), nullable=False)
+    course_id = db.Column(db.String(50), nullable=False)
+    date = db.Column(db.String(10), nullable=False)  # ISO YYYY-MM-DD
+    was_open = db.Column(db.Boolean, nullable=False, default=False)
+    updated_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "source_name", "course_id", "date", name="uq_event_state_occurrence"
+        ),
+    )
+
+
+class PushSubscription(db.Model):
+    """A browser/PWA push endpoint belonging to a user. One user can have
+    several (phone, laptop, ...)."""
+
+    __tablename__ = "push_subscriptions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    endpoint = db.Column(db.String(500), unique=True, nullable=False)
+    p256dh = db.Column(db.String(200), nullable=False)
+    auth = db.Column(db.String(100), nullable=False)
+    created_at = db.Column(db.DateTime, default=dt.datetime.utcnow)

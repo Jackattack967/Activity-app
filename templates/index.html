@@ -27,6 +27,10 @@
     {% endfor %}
     <button id="preferences-btn" type="button" title="Choose your default activity, location, and spots filter">⚙ Preferences</button>
     <button id="refresh-btn" type="button">Refresh</button>
+    {% if push_enabled and logged_in %}
+    <button id="alerts-btn" type="button" data-vapid-key="{{ vapid_public_key }}"
+            title="Get notified when a spot opens in one of your starred activities">🔔 Alerts</button>
+    {% endif %}
     {% if accounts_enabled %}
       {% if logged_in %}
       <span class="account-badge" title="{{ current_user_name }}">
