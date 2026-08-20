@@ -16,6 +16,10 @@ services:
         value: 3.12.10
       # These are secrets — sync:false means Render will prompt you to enter
       # them once in the dashboard rather than storing them in this file.
+      #
+      # Every env var the app needs must be declared here: this service is
+      # Blueprint-managed, so Render reconciles its environment against this
+      # list and will not keep variables added in the dashboard alone.
       - key: DATABASE_URL
         sync: false
       - key: GOOGLE_CLIENT_ID
@@ -23,4 +27,14 @@ services:
       - key: GOOGLE_CLIENT_SECRET
         sync: false
       - key: FLASK_SECRET_KEY
+        sync: false
+      # Web Push (spot-opened alerts).
+      - key: VAPID_PUBLIC_KEY
+        sync: false
+      - key: VAPID_PRIVATE_KEY
+        sync: false
+      - key: VAPID_CLAIM_EMAIL
+        sync: false
+      # Shared secret the external scheduler presents to /api/check-watches.
+      - key: WATCH_CHECK_TOKEN
         sync: false
