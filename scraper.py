@@ -74,6 +74,8 @@ class Event:
     course_id: str = ""
     details: str = ""
     detail_url: str = ""
+    # True when the portal offers its own waitlist for this (full) session.
+    has_waitlist: bool = False
 
 
 def build_login_url(source: dict) -> str:
@@ -171,6 +173,16 @@ def _normalize(raw: dict, source: dict) -> Event:
         else ""
     )
 
+    # BookButtonDescription carries the waitlist wording (e.g. "Add to Stick,
+    # Ring & Puck waitlist") on nearly every session, including ones that are
+    # simply not open for registration yet — so it alone would mislabel those
+    # as full. Only advertise a waitlist when the session is actually Full.
+    spots_text = (raw.get("Spots") or "").strip().lower()
+    has_waitlist = (
+        "waitlist" in (raw.get("BookButtonDescription") or "").lower()
+        and "full" in spots_text
+    )
+
     return Event(
         activity_type=source["activity_type"],
         event_name=raw.get("EventName", "").strip(),
@@ -188,6 +200,7 @@ def _normalize(raw: dict, source: dict) -> Event:
         course_id=raw.get("CourseIdTrimmed", ""),
         details=(raw.get("Details") or "").strip(),
         detail_url=detail_url,
+        has_waitlist=has_waitlist,
     )
 
 

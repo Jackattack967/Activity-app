@@ -286,6 +286,13 @@ main {
 }
 .register-btn:hover { background: var(--brand-dark); }
 
+.register-btn.waitlist-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.register-btn.waitlist-btn:hover { background: var(--gray-bg); }
+
 .badge {
   display: inline-block;
   font-size: 0.78rem;

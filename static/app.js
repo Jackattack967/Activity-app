@@ -195,15 +195,22 @@
       statusCol.appendChild(badgeEl);
 
       if (ev.detail_url) {
+        const isWaitlist = !badge.open && ev.has_waitlist;
         const registerEl = document.createElement("a");
-        registerEl.className = "register-btn";
-        registerEl.textContent = badge.open ? "Register / Pay ↗" : "View details ↗";
+        registerEl.className = "register-btn" + (isWaitlist ? " waitlist-btn" : "");
+        registerEl.textContent = badge.open
+          ? "Register / Pay ↗"
+          : isWaitlist
+          ? "Join waitlist ↗"
+          : "View details ↗";
         registerEl.href = ev.detail_url;
         registerEl.target = "_blank";
         registerEl.rel = "noopener noreferrer";
-        registerEl.title =
-          `Opens this session's official ${ev.source_name} page in a new tab, ` +
-          "where registration and payment are handled by the city.";
+        registerEl.title = isWaitlist
+          ? `This session is full. Opens its official ${ev.source_name} page in a ` +
+            "new tab, where the city runs the waitlist."
+          : `Opens this session's official ${ev.source_name} page in a new tab, ` +
+            "where registration and payment are handled by the city.";
         statusCol.appendChild(registerEl);
       }
 
