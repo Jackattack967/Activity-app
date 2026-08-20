@@ -386,7 +386,7 @@
       return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
     }
 
-    async function setUpAlertsButton() {
+    function setUpAlertsButton() {
       const alertsBtn = document.getElementById("alerts-btn");
       if (!alertsBtn) return;
 
@@ -395,14 +395,28 @@
       if (!supported) {
         alertsBtn.textContent = "🔔 Alerts unavailable";
         alertsBtn.disabled = true;
-        alertsBtn.title = "This browser doesn't support push notifications.";
+        alertsBtn.title =
+          "This browser can't receive push notifications here. On iPhone, add " +
+          "this site to your Home Screen first, then open it from that icon.";
         return;
       }
 
       const vapidKey = alertsBtn.dataset.vapidKey;
 
+      // navigator.serviceWorker.ready never settles if the worker fails to
+      // activate, so cap the wait — otherwise this hangs forever and takes
+      // the button's behaviour down with it.
+      function swReady(timeoutMs = 8000) {
+        return Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("service worker not ready")), timeoutMs)
+          ),
+        ]);
+      }
+
       async function currentSubscription() {
-        const reg = await navigator.serviceWorker.ready;
+        const reg = await swReady();
         return reg.pushManager.getSubscription();
       }
 
@@ -414,12 +428,9 @@
           : "Get notified when a spot opens in one of your starred activities.";
       }
 
-      try {
-        paint(!!(await currentSubscription()));
-      } catch (err) {
-        console.error("Could not read push subscription:", err);
-      }
-
+      // Attach the click handler BEFORE any await. Awaiting first would mean a
+      // hung service worker prevents this listener from ever being attached,
+      // leaving a button that looks fine and does nothing when clicked.
       alertsBtn.addEventListener("click", async () => {
         alertsBtn.disabled = true;
         try {
@@ -444,7 +455,9 @@
             return;
           }
 
-          const reg = await navigator.serviceWorker.ready;
+          if (!vapidKey) throw new Error("missing VAPID public key");
+
+          const reg = await swReady();
           const sub = await reg.pushManager.subscribe({
             userVisibleOnly: true,
             applicationServerKey: urlBase64ToUint8Array(vapidKey),
@@ -459,11 +472,24 @@
           paint(true);
         } catch (err) {
           console.error("Failed to toggle alerts:", err);
-          paint(false);
+          // Surface the failure on the button itself — a silent console error
+          // just looks like a dead button to the person clicking it.
+          alertsBtn.textContent = "🔔 Alerts failed";
+          alertsBtn.title = "Couldn't enable alerts: " + (err && err.message) +
+            ". Try reloading the page.";
         } finally {
           alertsBtn.disabled = false;
         }
       });
+
+      // Reflect the existing subscription state. Runs after the listener is
+      // attached, so a failure here can never disable the button.
+      currentSubscription()
+        .then((sub) => paint(!!sub))
+        .catch((err) => {
+          console.error("Could not read push subscription:", err);
+          paint(false);
+        });
     }
 
     preferencesBtn.addEventListener("click", openPreferencesModal);
