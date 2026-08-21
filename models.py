@@ -15,6 +15,10 @@ db = SQLAlchemy()
 _ADDITIVE_MIGRATIONS = (
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS "
     "email_alerts BOOLEAN NOT NULL DEFAULT FALSE",
+    # Favourites moved from per-course to per-activity matching.
+    "ALTER TABLE favorites ADD COLUMN IF NOT EXISTS "
+    "location VARCHAR(255) NOT NULL DEFAULT ''",
+    "ALTER TABLE favorites ALTER COLUMN course_id DROP NOT NULL",
 )
 
 
@@ -61,20 +65,34 @@ class Preference(db.Model):
 
 
 class Favorite(db.Model):
-    """A starred recurring activity, identified by its stable course_id
-    (not the per-occurrence event id, which changes every date)."""
+    """A watched activity, matched by name and venue rather than by course id.
+
+    The portal issues a separate course id per recurring slot, so "Stick,
+    Ring & Puck" at one complex spans eleven of them — starring by course id
+    meant clicking the same activity eleven times and still missing any slot
+    published later. Matching on (name, location) collapses those into one
+    star while keeping genuinely different venues apart: Public Swim at Rocky
+    Point stays distinct from Public Swim at Westhill.
+
+    course_id is retained only as a record of what was originally starred.
+    """
 
     __tablename__ = "favorites"
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     source_name = db.Column(db.String(100), nullable=False)
-    course_id = db.Column(db.String(50), nullable=False)
     event_name = db.Column(db.String(255), nullable=False)
+    location = db.Column(db.String(255), nullable=False, default="")
+    course_id = db.Column(db.String(50))
 
     __table_args__ = (
         db.UniqueConstraint(
-            "user_id", "source_name", "course_id", name="uq_favorite_user_course"
+            "user_id",
+            "source_name",
+            "event_name",
+            "location",
+            name="uq_favorite_user_activity",
         ),
     )
 

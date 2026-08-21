@@ -164,12 +164,36 @@
       return finishesAt < now.getHours() * 60 + now.getMinutes();
     }
 
+    // A star covers the activity — its name at a venue — not the single
+    // session clicked, since one activity is split across many recurring
+    // course ids.
+    function sameActivity(a, b) {
+      return (
+        a.source_name === b.source_name &&
+        a.event_name === b.event_name &&
+        (a.location || "") === (b.location || "")
+      );
+    }
+
+    function countSessions(ev) {
+      return allEvents.filter((e) => sameActivity(e, ev)).length;
+    }
+
+    function favoriteTitle(ev) {
+      const n = countSessions(ev);
+      const scope = n > 1 ? `all ${n} “${ev.event_name}” sessions` : `“${ev.event_name}”`;
+      const where = ev.location ? ` at ${ev.location}` : "";
+      return ev.is_favorited
+        ? `Stop watching ${scope}${where}`
+        : `Watch ${scope}${where} — you'll be alerted whenever a spot opens`;
+    }
+
     function buildFavoriteButton(ev) {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "favorite-btn" + (ev.is_favorited ? " favorited" : "");
       btn.textContent = ev.is_favorited ? "★" : "☆";
-      btn.title = ev.is_favorited ? "Remove from favorites" : "Add to favorites";
+      btn.title = favoriteTitle(ev);
       btn.addEventListener("click", async () => {
         btn.disabled = true;
         try {
@@ -178,19 +202,21 @@
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               source_name: ev.source_name,
-              course_id: ev.course_id,
               event_name: ev.event_name,
+              location: ev.location || "",
+              course_id: ev.course_id,
             }),
           });
           const data = await resp.json();
-          ev.is_favorited = !!data.favorited;
-          btn.textContent = ev.is_favorited ? "★" : "☆";
-          btn.title = ev.is_favorited ? "Remove from favorites" : "Add to favorites";
-          btn.classList.toggle("favorited", ev.is_favorited);
-          if (favoritesOnlyFilterEl && favoritesOnlyFilterEl.checked) render();
+          const nowFavorited = !!data.favorited;
+          // Apply to every session of this activity, so all their stars
+          // update together rather than just the one clicked.
+          allEvents.forEach((e) => {
+            if (sameActivity(e, ev)) e.is_favorited = nowFavorited;
+          });
+          render();
         } catch (err) {
           console.error("Failed to toggle favorite:", err);
-        } finally {
           btn.disabled = false;
         }
       });

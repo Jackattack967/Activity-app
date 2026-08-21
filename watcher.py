@@ -190,10 +190,16 @@ def check_watches(events: list[dict]) -> dict:
     today = dt.date.today().isoformat()
 
     # Only users' favourites matter, so build the watcher index up front and
-    # skip any occurrence nobody is watching.
-    watchers: dict[tuple[str, str], list] = {}
+    # skip any occurrence nobody is watching. Keyed by activity (name at a
+    # venue) rather than course id, so one star covers every recurring slot
+    # of that activity — including ones published after it was starred.
+    # A favourite with no venue recorded is keyed with None to match any.
+    watchers: dict[tuple, list] = {}
     for fav in Favorite.query.all():
-        watchers.setdefault((fav.source_name, fav.course_id), []).append(fav.user)
+        location = fav.location or None
+        watchers.setdefault(
+            (fav.source_name or "", fav.event_name or "", location), []
+        ).append(fav.user)
 
     prior = {
         (s.source_name, s.course_id, s.date): s
@@ -230,7 +236,12 @@ def check_watches(events: list[dict]) -> dict:
         checked += 1
         if open_now and not state.was_open:
             transitions += 1
-            for user in watchers.get((source_name, course_id), []):
+            event_name = event.get("event_name") or ""
+            location = event.get("location") or ""
+            # Exact venue match, plus legacy favourites recorded without one.
+            recipients = watchers.get((source_name, event_name, location), [])
+            recipients = recipients + watchers.get((source_name, event_name, None), [])
+            for user in {u.id: u for u in recipients}.values():
                 notifications += notify_user(user, event)
 
         if state.was_open != open_now:

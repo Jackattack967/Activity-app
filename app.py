@@ -120,20 +120,37 @@ def _is_logged_in() -> bool:
         return False
 
 
-def _favorited_course_ids() -> set[tuple[str, str]]:
+def _activity_key(source_name: str, event_name: str, location: str) -> tuple:
+    """Identity of a watchable activity: its name at a particular venue.
+
+    Deliberately not the course id — the portal issues one per recurring
+    slot, so a single activity spans many of them.
+    """
+    return (source_name or "", event_name or "", location or "")
+
+
+def _favorited_keys() -> set[tuple]:
     if not _is_logged_in():
         return set()
-    return {(f.source_name, f.course_id) for f in current_user.favorites}
+    keys = set()
+    for f in current_user.favorites:
+        keys.add(_activity_key(f.source_name, f.event_name, f.location))
+        if not f.location:
+            # Legacy star with no venue recorded: match the name anywhere.
+            keys.add((f.source_name or "", f.event_name or "", None))
+    return keys
 
 
 def _annotate_favorites(events: list[dict]) -> list[dict]:
     # Cached event dicts are shared across all requests/users — never mutate
     # them in place, or one user's favorite would leak into everyone's view.
-    favorited = _favorited_course_ids()
-    return [
-        {**e, "is_favorited": (e.get("source_name"), e.get("course_id")) in favorited}
-        for e in events
-    ]
+    favorited = _favorited_keys()
+    out = []
+    for e in events:
+        key = _activity_key(e.get("source_name"), e.get("event_name"), e.get("location"))
+        wildcard = (e.get("source_name") or "", e.get("event_name") or "", None)
+        out.append({**e, "is_favorited": key in favorited or wildcard in favorited})
+    return out
 
 
 def _login_links() -> list[dict]:
@@ -276,16 +293,27 @@ def api_favorites():
     if request.method == "POST":
         body = request.get_json(force=True) or {}
         source_name = (body.get("source_name") or "").strip()
-        course_id = (body.get("course_id") or "").strip()
         event_name = (body.get("event_name") or "").strip()
-        if not source_name or not course_id:
-            return jsonify({"error": "source_name and course_id are required"}), 400
+        location = (body.get("location") or "").strip()
+        course_id = (body.get("course_id") or "").strip() or None
+        if not source_name or not event_name:
+            return jsonify({"error": "source_name and event_name are required"}), 400
 
-        existing = Favorite.query.filter_by(
-            user_id=current_user.id, source_name=source_name, course_id=course_id
-        ).first()
-        if existing:
-            db.session.delete(existing)
+        # One star covers the activity at this venue, however many recurring
+        # slots the portal splits it into. Legacy rows with no venue recorded
+        # are matched too, so unstarring clears them.
+        matches = [
+            f
+            for f in Favorite.query.filter_by(
+                user_id=current_user.id,
+                source_name=source_name,
+                event_name=event_name,
+            ).all()
+            if f.location == location or not f.location
+        ]
+        if matches:
+            for f in matches:
+                db.session.delete(f)
             db.session.commit()
             return jsonify({"favorited": False})
 
@@ -293,8 +321,9 @@ def api_favorites():
             Favorite(
                 user_id=current_user.id,
                 source_name=source_name,
-                course_id=course_id,
                 event_name=event_name,
+                location=location,
+                course_id=course_id,
             )
         )
         db.session.commit()
@@ -302,7 +331,11 @@ def api_favorites():
 
     return jsonify(
         [
-            {"source_name": f.source_name, "course_id": f.course_id, "event_name": f.event_name}
+            {
+                "source_name": f.source_name,
+                "event_name": f.event_name,
+                "location": f.location,
+            }
             for f in current_user.favorites
         ]
     )
