@@ -17,31 +17,62 @@
 <body>
 <header class="topbar">
   <h1>Activity Schedule Dashboard</h1>
+
+  {# Only Refresh and the menu stay on the bar. Everything else is used
+     rarely (set once and forgotten), and eight competing controls wrapped
+     badly on a phone. #}
   <div class="topbar-meta">
-    <span id="last-updated" data-fetched-at="{{ fetched_at }}">Loading…</span>
-    {% for link in login_links %}
-    <a class="login-link" href="{{ link.url }}" target="_blank" rel="noopener noreferrer"
-       title="Opens {{ link.name }}'s official sign-in page in a new tab">
-      Log in ({{ link.name.replace('City of ', '') }}) ↗
-    </a>
-    {% endfor %}
-    <button id="preferences-btn" type="button" title="Choose your default activity, location, and spots filter">⚙ Preferences</button>
     <button id="refresh-btn" type="button">Refresh</button>
-    {% if push_enabled and logged_in %}
-    <button id="alerts-btn" type="button" data-vapid-key="{{ vapid_public_key }}"
-            title="Get notified when a spot opens in one of your starred activities">🔔 Alerts</button>
+
+    {% if accounts_enabled and not logged_in %}
+    <a class="google-signin-btn" href="{{ url_for('auth.login_google') }}">Sign in with Google</a>
     {% endif %}
-    {% if accounts_enabled %}
-      {% if logged_in %}
-      <span class="account-badge" title="{{ current_user_name }}">
-        {% if current_user_picture %}<img src="{{ current_user_picture }}" alt="" class="account-avatar">{% endif %}
-        {{ current_user_name }}
-      </span>
-      <a class="login-link" href="{{ url_for('auth.logout') }}">Log out</a>
-      {% else %}
-      <a class="google-signin-btn" href="{{ url_for('auth.login_google') }}">Sign in with Google</a>
-      {% endif %}
-    {% endif %}
+
+    <div class="menu-wrap">
+      <button id="menu-btn" type="button" class="menu-btn"
+              aria-haspopup="true" aria-expanded="false" aria-controls="main-menu"
+              aria-label="Menu">
+        {% if logged_in and current_user_picture %}
+        <img src="{{ current_user_picture }}" alt="" class="account-avatar">
+        {% else %}
+        <span aria-hidden="true">☰</span>
+        {% endif %}
+        <span aria-hidden="true" class="menu-caret">▾</span>
+      </button>
+
+      <div id="main-menu" class="menu-panel" role="menu" hidden>
+        {% if logged_in %}
+        <div class="menu-header">
+          Signed in as<br><strong>{{ current_user_name }}</strong>
+        </div>
+        {% endif %}
+
+        <span id="last-updated" class="menu-status" data-fetched-at="{{ fetched_at }}">Loading…</span>
+
+        <button id="preferences-btn" type="button" class="menu-item" role="menuitem">
+          ⚙ Preferences
+        </button>
+
+        {% if push_enabled and logged_in %}
+        <button id="alerts-btn" type="button" class="menu-item" role="menuitem"
+                data-vapid-key="{{ vapid_public_key }}"
+                title="Get notified when a spot opens in one of your starred activities">🔔 Alerts</button>
+        {% endif %}
+
+        {% if login_links %}
+        <div class="menu-section-label">Sign in on the city's own site</div>
+        {% for link in login_links %}
+        <a class="menu-item" role="menuitem" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">
+          {{ link.name.replace('City of ', '') }} ↗
+        </a>
+        {% endfor %}
+        {% endif %}
+
+        {% if accounts_enabled and logged_in %}
+        <a class="menu-item menu-item-quiet" role="menuitem" href="{{ url_for('auth.logout') }}">Log out</a>
+        {% endif %}
+      </div>
+    </div>
   </div>
 </header>
 

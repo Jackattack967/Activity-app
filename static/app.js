@@ -23,6 +23,41 @@
     }
   });
 
+  // Header menu. Wired up here, before runApp(), so the menu still opens even
+  // if something later fails — it holds Preferences, Alerts and Log out.
+  const menuBtn = document.getElementById("menu-btn");
+  const menuPanel = document.getElementById("main-menu");
+
+  function closeMenu() {
+    if (!menuPanel) return;
+    menuPanel.hidden = true;
+    if (menuBtn) menuBtn.setAttribute("aria-expanded", "false");
+  }
+
+  if (menuBtn && menuPanel) {
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = menuPanel.hidden;
+      menuPanel.hidden = !open;
+      menuBtn.setAttribute("aria-expanded", String(open));
+    });
+
+    // Clicking a menu entry acts and then dismisses; clicking inside the
+    // panel otherwise (e.g. the status text) should not close it. The alerts
+    // toggle is the exception — it changes label to report the result, which
+    // you'd never see if the menu closed out from under it.
+    menuPanel.addEventListener("click", (e) => {
+      const item = e.target.closest(".menu-item");
+      if (item && item.id !== "alerts-btn") closeMenu();
+      else e.stopPropagation();
+    });
+
+    document.addEventListener("click", closeMenu);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") closeMenu();
+    });
+  }
+
   try {
     runApp();
   } catch (err) {

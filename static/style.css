@@ -71,40 +71,103 @@ body {
   background: var(--gray-bg);
 }
 
-.account-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
-}
-
 .account-avatar {
   width: 22px;
   height: 22px;
   border-radius: 50%;
 }
 
-#alerts-btn {
+.menu-wrap {
+  position: relative;
+}
+
+.menu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   background: var(--surface);
   color: var(--text);
   border: 1px solid var(--border);
-  padding: 0.45rem 0.9rem;
   border-radius: 6px;
-  font-size: 0.85rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.9rem;
   cursor: pointer;
+  line-height: 1;
+}
+.menu-btn:hover { background: var(--gray-bg); }
+.menu-caret { font-size: 0.7rem; color: var(--text-muted); }
+
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  min-width: 230px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  /* Above the cards, but below the preferences modal. */
+  z-index: 50;
+}
+/* Author rules beat the browser's [hidden] default, so state this
+   explicitly — otherwise the panel would never actually hide. */
+.menu-panel[hidden] {
+  display: none;
+}
+
+.menu-header {
+  padding: 0.5rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.3rem;
+}
+
+.menu-status {
+  padding: 0.35rem 0.6rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.menu-section-label {
+  padding: 0.5rem 0.6rem 0.2rem;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border);
+  margin-top: 0.3rem;
+}
+
+.menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 0.88rem;
+  font-family: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
   white-space: nowrap;
 }
-#alerts-btn:hover { background: var(--gray-bg); }
-#alerts-btn.alerts-on {
-  background: var(--green-bg);
-  color: var(--green);
-  border-color: var(--green-bg);
-}
+.menu-item:hover { background: var(--gray-bg); }
+.menu-item-quiet { color: var(--text-muted); }
+
+/* The alerts button keeps its state colour inside the menu. */
+#alerts-btn.alerts-on { color: var(--green); font-weight: 600; }
+
+/* Alerts and Preferences now live inside the menu and inherit .menu-item;
+   only their state styling is specified here. */
 #alerts-btn:disabled { opacity: 0.6; cursor: default; }
 
-#refresh-btn, #preferences-btn {
+#refresh-btn {
   background: var(--brand);
   color: white;
   border: none;
@@ -113,14 +176,8 @@ body {
   font-size: 0.85rem;
   cursor: pointer;
 }
-#refresh-btn:hover, #preferences-btn:hover { background: var(--brand-dark); }
+#refresh-btn:hover { background: var(--brand-dark); }
 #refresh-btn:disabled { opacity: 0.6; cursor: default; }
-#preferences-btn {
-  background: var(--surface);
-  color: var(--text);
-  border: 1px solid var(--border);
-}
-#preferences-btn:hover { background: var(--gray-bg); }
 
 .banner {
   margin: 1rem 1.5rem 0;
