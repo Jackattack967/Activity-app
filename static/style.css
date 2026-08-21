@@ -499,6 +499,28 @@ footer {
     font-size: 0.78rem;
   }
 
+  /* A right-anchored dropdown has to grow leftwards, which on a narrow
+     screen means it either runs off the edge or hangs awkwardly across the
+     page. Anchor it to the header instead so it spans the full width as a
+     sheet — it cannot be clipped, and the targets get bigger too.
+     .menu-wrap goes static so .topbar becomes the positioning context. */
+  .menu-wrap {
+    position: static;
+  }
+  .topbar {
+    position: relative;
+  }
+  .menu-panel {
+    top: calc(100% + 0.3rem);
+    left: var(--edge);
+    right: var(--edge);
+    min-width: 0;
+    max-width: none;
+  }
+  .menu-item {
+    padding: 0.7rem 0.6rem;
+  }
+
   .star-hint {
     padding: 0 var(--edge);
     font-size: 0.75rem;
