@@ -437,16 +437,38 @@ footer {
 }
 
 @media (max-width: 560px) {
-  /* With a dozen activity types the chips wrapped to four rows and pushed
-     the first activity off-screen. Keep them on one swipeable row so the
-     schedule itself stays visible. */
+  /* Phones: the chrome above the list had grown to consume 38% of the
+     screen, leaving room for only three activities. Everything here trades
+     padding and type size for more of the actual schedule being visible.
+     --edge keeps the horizontal gutter consistent so the chip row's
+     bleed-to-edge trick stays aligned with it. */
+  :root {
+    --edge: 1rem;
+  }
+
+  .topbar {
+    padding: 0.7rem var(--edge);
+    gap: 0.5rem;
+  }
+  .topbar h1 {
+    /* Was wrapping onto a second line and costing ~30px. */
+    font-size: 1.05rem;
+  }
+
+  .filters {
+    padding: 0.6rem var(--edge) 0.4rem;
+    gap: 0.5rem;
+  }
+
+  /* With a dozen activity types the chips wrapped to four rows. Keep them
+     on one swipeable row, bleeding to the screen edge so it reads as
+     scrollable rather than clipped. */
   #activity-filters {
     flex-wrap: nowrap;
     overflow-x: auto;
     scrollbar-width: none;
-    /* Let chips run to the screen edge so it reads as scrollable. */
-    margin: 0 -1.5rem;
-    padding: 0 1.5rem 0.25rem;
+    margin: 0 calc(-1 * var(--edge));
+    padding: 0 var(--edge) 0.25rem;
   }
   #activity-filters::-webkit-scrollbar {
     display: none;
@@ -455,15 +477,96 @@ footer {
     flex: 0 0 auto;
   }
 
+  /* Location and search share a row instead of stacking. */
+  .filters .filter-group:last-child {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.4rem 0.5rem;
+    align-items: center;
+  }
+  #location-filter,
+  #keyword-filter {
+    min-width: 0;
+    width: 100%;
+    font-size: 0.8rem;
+  }
+  .open-only-label {
+    font-size: 0.78rem;
+  }
+
+  .star-hint {
+    padding: 0 var(--edge);
+    font-size: 0.75rem;
+  }
+
+  main {
+    padding: 0.5rem var(--edge) 2rem;
+  }
+
+  .day-group {
+    margin-bottom: 1.1rem;
+  }
+  .day-group h2 {
+    font-size: 0.85rem;
+  }
+
+  .event-list {
+    gap: 0.4rem;
+  }
   .event-card {
-    grid-template-columns: 1fr;
-    gap: 0.35rem;
+    /* Time sits top-left with its status top-right, and the description
+       spans beneath — denser than stacking every field on its own row. */
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "time   status"
+      "main   main";
+    gap: 0.3rem 0.5rem;
+    padding: 0.6rem 0.75rem;
+  }
+  .event-time {
+    grid-area: time;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .event-main {
+    grid-area: main;
   }
   .event-status {
-    text-align: left;
+    grid-area: status;
+    text-align: right;
     flex-direction: row;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: flex-end;
+    gap: 0.4rem;
+  }
+
+  .event-title-row h3 {
+    font-size: 0.92rem;
+  }
+  .event-facility,
+  .event-meta {
+    font-size: 0.78rem;
+  }
+
+  /* Thumb targets. The rendered glyphs are small, so the hit areas are
+     padded out and the padding pulled back with negative margin, keeping
+     the visual layout unchanged. */
+  .register-btn {
+    padding: 0.45rem 0.8rem;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .favorite-btn {
+    padding: 0.4rem;
+    margin: -0.4rem 0 -0.4rem -0.4rem;
+  }
+  .event-details summary {
+    padding: 0.25rem 0;
+  }
+
+  footer {
+    padding: 1rem var(--edge) 2rem;
   }
 }
 
