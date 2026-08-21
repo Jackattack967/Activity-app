@@ -1,0 +1,67 @@
+name: Wake the dashboard and run a watch check
+
+# Why this exists:
+#
+# The schedule watcher is normally driven by cron-job.org every 5 minutes,
+# which works well while the app is awake. It cannot, however, *wake* the app.
+# Render's free tier sleeps overnight, and while it boots Render serves a
+# large HTML "Application loading" page — big enough that cron-job.org aborts
+# the connection as "output too large". Aborting means the boot never
+# finishes, so every subsequent 5-minute ping fails the same way and the
+# watcher stays dead all day.
+#
+# curl simply waits through the boot and doesn't care how big the response is,
+# so this workflow does the morning wake-up. Once the app is up, cron-job.org
+# takes over for the frequent checks.
+
+on:
+  schedule:
+    # GitHub cron is UTC. 13:00-16:59 UTC covers roughly 06:00-10:00 in
+    # Vancouver across both PST and PDT, so the wake happens before the
+    # cron-job.org schedule starts at 07:00 local either way.
+    # Repeated attempts because GitHub's scheduler is frequently late and
+    # may skip runs entirely under load.
+    - cron: "*/10 13-16 * * *"
+  # Lets you trigger it by hand from the Actions tab to test.
+  workflow_dispatch:
+
+# Never run two wake-ups at once.
+concurrency:
+  group: wake-dashboard
+  cancel-in-progress: false
+
+jobs:
+  wake:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Wake the app and run a watch check
+        env:
+          WATCH_CHECK_URL: ${{ secrets.WATCH_CHECK_URL }}
+        run: |
+          if [ -z "$WATCH_CHECK_URL" ]; then
+            echo "::error::WATCH_CHECK_URL secret is not set."
+            echo "Add it under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+          for attempt in 1 2 3 4 5 6; do
+            echo "Attempt $attempt..."
+            # --max-time 180 so a cold start has room to finish booting.
+            # Body goes to a file so the token in the URL is never echoed.
+            code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+                     --max-time 180 "$WATCH_CHECK_URL" || echo "000")
+
+            if [ "$code" = "200" ]; then
+              echo "Watch check succeeded (HTTP 200)."
+              # The endpoint returns only aggregate counts, no personal data.
+              cat /tmp/out.json
+              exit 0
+            fi
+
+            echo "Got HTTP $code; the app is probably still booting."
+            sleep 30
+          done
+
+          echo "::error::Could not reach the watch endpoint after 6 attempts."
+          exit 1
