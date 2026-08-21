@@ -70,11 +70,25 @@ def send_push(subscription: PushSubscription, payload: dict) -> bool:
         return True
 
 
+def email_provider() -> str | None:
+    """Which email provider is configured, if any.
+
+    Brevo is preferred: its free tier verifies a single sender address and
+    then delivers to any recipient, whereas an unverified Resend account can
+    only reach the account owner's own address.
+    """
+    if os.environ.get("BREVO_API_KEY"):
+        return "brevo"
+    if os.environ.get("RESEND_API_KEY"):
+        return "resend"
+    return None
+
+
 def send_email(to_address: str, event: dict) -> bool:
-    """Email one 'a spot opened' alert via Resend. Best-effort: a mail
-    failure must never abort the watch run or block push delivery."""
-    api_key = os.environ.get("RESEND_API_KEY")
-    if not api_key:
+    """Email one 'a spot opened' alert. Best-effort: a mail failure must
+    never abort the watch run or block push delivery."""
+    provider = email_provider()
+    if provider is None:
         return False
 
     name = event.get("event_name", "Activity")
@@ -96,27 +110,49 @@ def send_email(to_address: str, event: dict) -> bool:
       </p>
     """
 
+    subject = f"Spot open: {name}"
+    sender = os.environ.get("ALERT_FROM_EMAIL", "onboarding@resend.dev")
+
+    if provider == "brevo":
+        url_endpoint = "https://api.brevo.com/v3/smtp/email"
+        headers = {
+            "api-key": os.environ["BREVO_API_KEY"],
+            "content-type": "application/json",
+            "accept": "application/json",
+        }
+        payload = {
+            "sender": {"email": sender, "name": "Activity Schedule Dashboard"},
+            "to": [{"email": to_address}],
+            "subject": subject,
+            "htmlContent": f"<html><body>{body}</body></html>",
+        }
+    else:
+        url_endpoint = "https://api.resend.com/emails"
+        headers = {
+            "Authorization": f"Bearer {os.environ['RESEND_API_KEY']}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "from": sender,
+            "to": [to_address],
+            "subject": subject,
+            "html": body,
+        }
+
     try:
-        resp = requests.post(
-            "https://api.resend.com/emails",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "from": os.environ.get("ALERT_FROM_EMAIL", "onboarding@resend.dev"),
-                "to": [to_address],
-                "subject": f"Spot open: {name}",
-                "html": body,
-            },
-            timeout=15,
-        )
+        resp = requests.post(url_endpoint, headers=headers, json=payload, timeout=15)
         if resp.status_code >= 400:
-            logger.warning("Resend rejected the alert email: %s %s", resp.status_code, resp.text[:300])
+            logger.warning(
+                "%s rejected the alert email to %s: %s %s",
+                provider,
+                to_address,
+                resp.status_code,
+                resp.text[:300],
+            )
             return False
         return True
     except Exception:
-        logger.exception("Failed to send alert email")
+        logger.exception("Failed to send alert email via %s", provider)
         return False
 
 

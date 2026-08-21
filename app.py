@@ -182,7 +182,8 @@ def api_watch_status():
     # deployment config only — no keys, and nothing about any user.
     channels = {
         "push_configured": bool(os.environ.get("VAPID_PUBLIC_KEY")),
-        "email_configured": bool(os.environ.get("RESEND_API_KEY")),
+        "email_configured": watcher.email_provider() is not None,
+        "email_provider": watcher.email_provider(),
     }
 
     if not ACCOUNTS_ENABLED:
@@ -412,7 +413,7 @@ def inject_user():
         "current_user_picture": current_user.picture_url if logged_in else None,
         "vapid_public_key": os.environ.get("VAPID_PUBLIC_KEY", ""),
         "push_enabled": bool(os.environ.get("VAPID_PUBLIC_KEY")) and ACCOUNTS_ENABLED,
-        "email_alerts_available": bool(os.environ.get("RESEND_API_KEY")),
+        "email_alerts_available": watcher.email_provider() is not None,
     }
 
 

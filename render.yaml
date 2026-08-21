@@ -38,9 +38,16 @@ services:
       # Shared secret the external scheduler presents to /api/check-watches.
       - key: WATCH_CHECK_TOKEN
         sync: false
-      # Email alerts (Resend). Optional: without these the feature stays
+      # Email alerts. Optional: without a provider key the feature stays
       # hidden and inert, and push alerts are unaffected.
+      #
+      # Brevo is preferred and takes precedence — its free tier verifies a
+      # single sender address and then delivers to any recipient, whereas an
+      # unverified Resend account can only email the account owner.
+      # ALERT_FROM_EMAIL must be the sender address verified with Brevo.
+      - key: BREVO_API_KEY
+        sync: false
       - key: RESEND_API_KEY
         sync: false
       - key: ALERT_FROM_EMAIL
-        value: onboarding@resend.dev
+        sync: false
