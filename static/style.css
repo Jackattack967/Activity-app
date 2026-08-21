@@ -192,6 +192,39 @@ main {
   color: var(--text-muted);
   padding: 3rem 0;
 }
+.empty-state p {
+  margin: 0 0 1rem;
+}
+
+.star-hint {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+.star-hint-icon {
+  color: #f5a623;
+  font-size: 0.95rem;
+}
+
+.event-details {
+  margin-top: 0.4rem;
+  font-size: 0.82rem;
+}
+.event-details summary {
+  cursor: pointer;
+  color: var(--brand);
+  font-weight: 600;
+  width: fit-content;
+}
+.event-details-body {
+  margin: 0.4rem 0 0;
+  color: var(--text-muted);
+  /* The portal's descriptions contain real line breaks and bulleted lines. */
+  white-space: pre-wrap;
+  line-height: 1.45;
+}
 
 .day-group { margin-bottom: 1.75rem; }
 

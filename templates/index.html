@@ -81,8 +81,21 @@
   </div>
 </div>
 
+{% if accounts_enabled %}
+<p class="star-hint">
+  {% if logged_in %}
+    Tap <span class="star-hint-icon">☆</span> on any activity to watch it — you'll be alerted the moment a spot opens.
+  {% else %}
+    Sign in to star activities and get alerted the moment a spot opens in one.
+  {% endif %}
+</p>
+{% endif %}
+
 <main id="schedule-root">
-  <p class="empty-state" id="empty-state" hidden>No activities match your filters.</p>
+  <div class="empty-state" id="empty-state" hidden>
+    <p id="empty-state-text">No activities match your filters.</p>
+    <button id="clear-filters-btn" type="button" class="btn-secondary">Clear all filters</button>
+  </div>
   <div id="day-groups"></div>
 </main>
 

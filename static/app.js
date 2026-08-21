@@ -94,7 +94,39 @@
       const [y, m, d] = isoDate.split("-").map(Number);
       const dt = new Date(y, m - 1, d);
       const monthDay = dt.toLocaleDateString(undefined, { month: "long", day: "numeric" });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysAway = Math.round((dt - today) / 86400000);
+      if (daysAway === 0) return `Today · ${dayOfWeek}, ${monthDay}`;
+      if (daysAway === 1) return `Tomorrow · ${dayOfWeek}, ${monthDay}`;
       return `${dayOfWeek}, ${monthDay}`;
+    }
+
+    function todayIso() {
+      const d = new Date();
+      const pad = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    // "09:30 PM" -> minutes since midnight, or null if unparseable.
+    function timeToMinutes(text) {
+      const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec((text || "").trim());
+      if (!m) return null;
+      let hours = parseInt(m[1], 10) % 12;
+      if (/PM/i.test(m[3])) hours += 12;
+      return hours * 60 + parseInt(m[2], 10);
+    }
+
+    // A session earlier today is just noise — you can't attend it any more.
+    function alreadyFinished(ev) {
+      if (ev.date !== todayIso()) return false;
+      const end = timeToMinutes(ev.end_time);
+      const start = timeToMinutes(ev.start_time);
+      const finishesAt = end === null ? start : end;
+      if (finishesAt === null) return false;
+      const now = new Date();
+      return finishesAt < now.getHours() * 60 + now.getMinutes();
     }
 
     function buildFavoriteButton(ev) {
@@ -182,6 +214,25 @@
       }
       mainCol.appendChild(metaRow);
 
+      // The portal's own description — equipment requirements, age rules,
+      // supervision ratios. Collapsed by default so it doesn't bury the list,
+      // but it answers "can I actually go to this?" without leaving the app.
+      if (ev.details) {
+        const details = document.createElement("details");
+        details.className = "event-details";
+
+        const summary = document.createElement("summary");
+        summary.textContent = "Details";
+        details.appendChild(summary);
+
+        const body = document.createElement("p");
+        body.className = "event-details-body";
+        body.textContent = ev.details;
+        details.appendChild(body);
+
+        mainCol.appendChild(details);
+      }
+
       card.appendChild(mainCol);
 
       const statusCol = document.createElement("div");
@@ -228,7 +279,9 @@
 
       const favoritesOnly = favoritesOnlyFilterEl ? favoritesOnlyFilterEl.checked : false;
 
-      const filtered = allEvents.filter((ev) => {
+      const upcoming = allEvents.filter((ev) => !alreadyFinished(ev));
+
+      const filtered = upcoming.filter((ev) => {
         if (activeActivity !== "all" && ev.activity_type !== activeActivity) return false;
         if (location && ev.location !== location) return false;
         if (keyword && !ev.event_name.toLowerCase().includes(keyword)) return false;
@@ -270,6 +323,30 @@
       }
 
       emptyStateEl.hidden = renderedAny;
+      if (!renderedAny) {
+        const anyFilterActive =
+          activeActivity !== "all" || !!location || !!keyword || openOnly || favoritesOnly;
+        const textEl = document.getElementById("empty-state-text");
+        const clearBtn = document.getElementById("clear-filters-btn");
+        if (textEl) {
+          textEl.textContent = anyFilterActive
+            ? "No activities match your filters."
+            : upcoming.length === 0
+            ? "No upcoming activities found. The schedule may not be published yet."
+            : "Nothing to show right now.";
+        }
+        // Only offer to clear filters when filters are actually the reason.
+        if (clearBtn) clearBtn.hidden = !anyFilterActive;
+      }
+    }
+
+    function clearAllFilters() {
+      selectActivityChip("all");
+      locationFilterEl.value = "";
+      keywordFilterEl.value = "";
+      openOnlyFilterEl.checked = false;
+      if (favoritesOnlyFilterEl) favoritesOnlyFilterEl.checked = false;
+      render();
     }
 
     function selectActivityChip(value) {
@@ -290,6 +367,9 @@
     keywordFilterEl.addEventListener("input", render);
     openOnlyFilterEl.addEventListener("change", render);
     if (favoritesOnlyFilterEl) favoritesOnlyFilterEl.addEventListener("change", render);
+
+    const clearFiltersBtn = document.getElementById("clear-filters-btn");
+    if (clearFiltersBtn) clearFiltersBtn.addEventListener("click", clearAllFilters);
 
     refreshBtn.addEventListener("click", async () => {
       refreshBtn.disabled = true;
