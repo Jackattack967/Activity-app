@@ -76,6 +76,65 @@ SOURCES = [
         "calendar_label": "Drop-in Ice Sports",
         "activity_type": "Skating",
     },
+    # Court and gym sports (badminton, basketball, soccer, volleyball,
+    # pickleball). These calendars are mixed — the same "Adult" calendar also
+    # carries chess and movie matinees — so "activity_type" here is only the
+    # fallback; scraper.classify_activity names the specific sport from the
+    # event title.
+    {
+        "source_name": "City of Port Moody",
+        "base_url": "https://cityofportmoody.perfectmind.com",
+        "org_path": "Contacts",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "f0d6be4f-5434-4db5-961a-7f864c4b3265",
+        "calendar_label": "Drop-in Adult & Senior Sports",
+        "activity_type": "Sports",
+    },
+    {
+        "source_name": "City of Port Moody",
+        "base_url": "https://cityofportmoody.perfectmind.com",
+        "org_path": "Contacts",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "008df9ef-8184-4ccb-8bd8-81bd52129eff",
+        "calendar_label": "Drop-in Children & Family",
+        "activity_type": "All Ages",
+    },
+    {
+        "source_name": "City of Coquitlam",
+        "base_url": "https://cityofcoquitlam.perfectmind.com",
+        "org_path": "23902/Clients",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "e827dd8f-aa12-4dcd-9cdb-5cf4fcf24c30",
+        "calendar_label": "Adult drop-in (pre-registration recommended)",
+        "activity_type": "Adult",
+    },
+    {
+        "source_name": "City of Coquitlam",
+        "base_url": "https://cityofcoquitlam.perfectmind.com",
+        "org_path": "23902/Clients",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "755afede-4c5a-49f0-ba97-7daedfb1aa4b",
+        "calendar_label": "All ages drop-in (pre-registration recommended)",
+        "activity_type": "All Ages",
+    },
+    {
+        "source_name": "City of Coquitlam",
+        "base_url": "https://cityofcoquitlam.perfectmind.com",
+        "org_path": "23902/Clients",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "318d5236-c907-4009-8e63-9221625dd015",
+        "calendar_label": "Youth drop-in (pre-registration recommended)",
+        "activity_type": "Youth",
+    },
+    {
+        "source_name": "City of Coquitlam",
+        "base_url": "https://cityofcoquitlam.perfectmind.com",
+        "org_path": "23902/Clients",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "592e7282-1885-4092-9cd3-4f787d4b4b5f",
+        "calendar_label": "Court reservations",
+        "activity_type": "Court Booking",
+    },
 ]
 
 # How many days ahead to pull the schedule for.

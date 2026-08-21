@@ -41,6 +41,34 @@ MAX_PAGES = 5  # safety cap on "load more" pagination per calendar
 
 DEFAULT_TIMEZONE = "America/Vancouver"
 
+# Several drop-in calendars are mixed bags — one "Adult" calendar carries
+# badminton, basketball, chess, art studio and movie matinees alike. Tagging
+# every event with its calendar's category would therefore file chess under
+# sports, so the specific sport is recognised from the event name and only
+# unrecognised events fall back to the calendar's configured type.
+#
+# Ordered: the first match wins, so put more specific patterns first.
+_ACTIVITY_PATTERNS = (
+    ("Badminton", re.compile(r"\bbadminton\b", re.I)),
+    ("Basketball", re.compile(r"\bbasketball\b", re.I)),
+    ("Soccer", re.compile(r"\bsoccer\b|\bfutsal\b", re.I)),
+    ("Volleyball", re.compile(r"\bvolleyball\b", re.I)),
+    ("Pickleball", re.compile(r"\bpickleball\b", re.I)),
+    ("Table Tennis", re.compile(r"\btable tennis\b|\bping[- ]?pong\b", re.I)),
+)
+
+
+def classify_activity(event_name: str, fallback: str) -> str:
+    """Name-derived activity type, falling back to the calendar's category.
+
+    Note there is deliberately no rule mapping "hockey" to skating: the
+    sports calendars contain *floor* hockey, which is not on ice.
+    """
+    for activity, pattern in _ACTIVITY_PATTERNS:
+        if pattern.search(event_name or ""):
+            return activity
+    return fallback
+
 
 def _build_session() -> requests.Session:
     session = requests.Session()
@@ -183,9 +211,11 @@ def _normalize(raw: dict, source: dict) -> Event:
         and "full" in spots_text
     )
 
+    event_name = raw.get("EventName", "").strip()
+
     return Event(
-        activity_type=source["activity_type"],
-        event_name=raw.get("EventName", "").strip(),
+        activity_type=classify_activity(event_name, source["activity_type"]),
+        event_name=event_name,
         date=iso_date,
         day_of_week=day_of_week,
         start_time=raw.get("FormattedStartTime", ""),

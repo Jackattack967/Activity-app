@@ -380,6 +380,24 @@ footer {
 }
 
 @media (max-width: 560px) {
+  /* With a dozen activity types the chips wrapped to four rows and pushed
+     the first activity off-screen. Keep them on one swipeable row so the
+     schedule itself stays visible. */
+  #activity-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Let chips run to the screen edge so it reads as scrollable. */
+    margin: 0 -1.5rem;
+    padding: 0 1.5rem 0.25rem;
+  }
+  #activity-filters::-webkit-scrollbar {
+    display: none;
+  }
+  #activity-filters .chip {
+    flex: 0 0 auto;
+  }
+
   .event-card {
     grid-template-columns: 1fr;
     gap: 0.35rem;
