@@ -86,9 +86,23 @@ def _get_events(force: bool = False) -> dict:
             events, errors = scraper.fetch_all_events(
                 config.SOURCES, config.SCHEDULE_WINDOW_DAYS
             )
-            _cache["events"] = [dataclasses.asdict(e) for e in events]
-            _cache["errors"] = errors
-            _cache["fetched_at"] = time.time()
+            fresh = [dataclasses.asdict(e) for e in events]
+            if not fresh and errors and _cache["events"]:
+                # Every source failed. That means the portals were
+                # unreachable, not that every session was cancelled — so
+                # keep showing the last good schedule rather than blanking
+                # the dashboard. fetched_at is left alone so the staleness
+                # check retries on the next request.
+                logger.warning(
+                    "Scrape returned no events with %d source error(s); "
+                    "keeping the previously cached schedule.",
+                    len(errors),
+                )
+                _cache["errors"] = errors
+            else:
+                _cache["events"] = fresh
+                _cache["errors"] = errors
+                _cache["fetched_at"] = time.time()
         return {
             "events": _cache["events"],
             "errors": _cache["errors"],
@@ -375,7 +389,10 @@ def api_check_watches():
     if not secrets.compare_digest(supplied, expected):
         return jsonify({"error": "invalid token"}), 403
 
-    data = _get_events()
+    # Force a fresh scrape: comparing against cached data would make alert
+    # latency the cache TTL rather than the scheduler's interval. This also
+    # refreshes the shared cache, so page loads stay fast *and* current.
+    data = _get_events(force=True)
     try:
         result = watcher.check_watches(data["events"])
     except Exception:
