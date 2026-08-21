@@ -102,6 +102,10 @@ body {
   right: 0;
   top: calc(100% + 0.4rem);
   min-width: 230px;
+  /* Never wider than the screen. Without this the panel is sized by its
+     widest label and, being right-anchored, grows off the left edge — which
+     truncated half the menu on a phone. */
+  max-width: min(280px, calc(100vw - 1.5rem));
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -155,7 +159,8 @@ body {
   border-radius: 6px;
   cursor: pointer;
   text-decoration: none;
-  white-space: nowrap;
+  /* Wrap rather than force the panel wider than the viewport. */
+  white-space: normal;
 }
 .menu-item:hover { background: var(--gray-bg); }
 .menu-item-quiet { color: var(--text-muted); }

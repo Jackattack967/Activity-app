@@ -60,7 +60,7 @@
         {% endif %}
 
         {% if login_links %}
-        <div class="menu-section-label">Sign in on the city's own site</div>
+        <div class="menu-section-label">City sign-in</div>
         {% for link in login_links %}
         <a class="menu-item" role="menuitem" href="{{ link.url }}" target="_blank" rel="noopener noreferrer">
           {{ link.name.replace('City of ', '') }} ↗
