@@ -195,7 +195,21 @@ def check_watches(events: list[dict]) -> dict:
     # of that activity — including ones published after it was starred.
     # A favourite with no venue recorded is keyed with None to match any.
     watchers: dict[tuple, list] = {}
+    # Single-session watches are held separately: they name a date, and they
+    # are consumed once they fire rather than watching forever.
+    session_watchers: dict[tuple, list] = {}
     for fav in Favorite.query.all():
+        if fav.scope == "session":
+            session_watchers.setdefault(
+                (
+                    fav.source_name or "",
+                    fav.event_name or "",
+                    fav.location or "",
+                    fav.session_date or "",
+                ),
+                [],
+            ).append(fav)
+            continue
         location = fav.location or None
         watchers.setdefault(
             (fav.source_name or "", fav.event_name or "", location), []
@@ -241,8 +255,18 @@ def check_watches(events: list[dict]) -> dict:
             # Exact venue match, plus legacy favourites recorded without one.
             recipients = watchers.get((source_name, event_name, location), [])
             recipients = recipients + watchers.get((source_name, event_name, None), [])
+
+            # One-off watches for exactly this date, consumed on firing.
+            one_offs = session_watchers.pop(
+                (source_name, event_name, location, date), []
+            )
+            recipients = recipients + [f.user for f in one_offs]
+
             for user in {u.id: u for u in recipients}.values():
                 notifications += notify_user(user, event)
+
+            for fav in one_offs:
+                db.session.delete(fav)
 
         if state.was_open != open_now:
             state.was_open = open_now
@@ -251,6 +275,16 @@ def check_watches(events: list[dict]) -> dict:
     # Occurrences in the past can never re-open; drop them so the table does
     # not grow without bound.
     EventState.query.filter(EventState.date < today).delete(synchronize_session=False)
+
+    # A one-off watch for a date that has been and gone can never fire, so
+    # retire it rather than leaving dead entries in someone's starred list.
+    expired = Favorite.query.filter(
+        Favorite.scope == "session",
+        Favorite.session_date != "",
+        Favorite.session_date < today,
+    ).delete(synchronize_session=False)
+    if expired:
+        logger.info("Retired %d expired one-off watch(es)", expired)
 
     # Heartbeat: a single row, overwritten each run, so the dashboard can show
     # whether the scheduler is actually calling us.

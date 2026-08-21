@@ -180,45 +180,136 @@
     }
 
     function favoriteTitle(ev) {
+      if (ev.favorite_scope === "activity") {
+        const n = countSessions(ev);
+        return `Watching all ${n} “${ev.event_name}” session${n === 1 ? "" : "s"}. Click to stop.`;
+      }
+      if (ev.favorite_scope === "session") {
+        return "Watching just this one session. Click to stop.";
+      }
+      return "Watch this — you'll be alerted when a spot opens";
+    }
+
+    function shortDate(isoDate) {
+      if (!isoDate) return "this session";
+      const [y, m, d] = isoDate.split("-").map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      });
+    }
+
+    async function toggleFavorite(ev, scope) {
+      const resp = await fetch("/api/favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          source_name: ev.source_name,
+          event_name: ev.event_name,
+          location: ev.location || "",
+          course_id: ev.course_id,
+          scope,
+          date: ev.date,
+        }),
+      });
+      const data = await resp.json();
+      const on = !!data.favorited;
+
+      if (on && scope === "session") {
+        // Only this dated occurrence lights up.
+        allEvents.forEach((e) => {
+          if (sameActivity(e, ev) && e.date === ev.date) {
+            e.is_favorited = true;
+            e.favorite_scope = "session";
+          }
+        });
+      } else {
+        // Starting or stopping an activity-wide watch affects every session
+        // of it; stopping also clears any one-off watch on the same activity.
+        allEvents.forEach((e) => {
+          if (sameActivity(e, ev)) {
+            e.is_favorited = on;
+            e.favorite_scope = on ? "activity" : null;
+          }
+        });
+      }
+      render();
+    }
+
+    function closeStarMenus() {
+      document.querySelectorAll(".star-menu").forEach((m) => m.remove());
+    }
+
+    function openStarMenu(btn, ev) {
+      closeStarMenus();
+      const menu = document.createElement("div");
+      menu.className = "star-menu";
+
       const n = countSessions(ev);
-      const scope = n > 1 ? `all ${n} “${ev.event_name}” sessions` : `“${ev.event_name}”`;
-      const where = ev.location ? ` at ${ev.location}` : "";
-      return ev.is_favorited
-        ? `Stop watching ${scope}${where}`
-        : `Watch ${scope}${where} — you'll be alerted whenever a spot opens`;
+      const options = [
+        {
+          scope: "activity",
+          label: `Watch every session`,
+          sub: n > 1 ? `all ${n}, including future ones` : "including future ones",
+        },
+        {
+          scope: "session",
+          label: "Just this one",
+          sub: shortDate(ev.date),
+        },
+      ];
+
+      options.forEach((opt) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "star-menu-item";
+        item.innerHTML =
+          `<span class="star-menu-label"></span><span class="star-menu-sub"></span>`;
+        item.querySelector(".star-menu-label").textContent = opt.label;
+        item.querySelector(".star-menu-sub").textContent = opt.sub;
+        item.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          closeStarMenus();
+          try {
+            await toggleFavorite(ev, opt.scope);
+          } catch (err) {
+            console.error("Failed to start watching:", err);
+          }
+        });
+        menu.appendChild(item);
+      });
+
+      btn.parentElement.appendChild(menu);
+      // Dismiss on the next outside click.
+      setTimeout(() => {
+        document.addEventListener("click", closeStarMenus, { once: true });
+      }, 0);
     }
 
     function buildFavoriteButton(ev) {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "favorite-btn" + (ev.is_favorited ? " favorited" : "");
+      btn.className =
+        "favorite-btn" +
+        (ev.is_favorited ? " favorited" : "") +
+        (ev.favorite_scope === "session" ? " favorited-once" : "");
       btn.textContent = ev.is_favorited ? "★" : "☆";
       btn.title = favoriteTitle(ev);
-      btn.addEventListener("click", async () => {
-        btn.disabled = true;
-        try {
-          const resp = await fetch("/api/favorites", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              source_name: ev.source_name,
-              event_name: ev.event_name,
-              location: ev.location || "",
-              course_id: ev.course_id,
-            }),
-          });
-          const data = await resp.json();
-          const nowFavorited = !!data.favorited;
-          // Apply to every session of this activity, so all their stars
-          // update together rather than just the one clicked.
-          allEvents.forEach((e) => {
-            if (sameActivity(e, ev)) e.is_favorited = nowFavorited;
-          });
-          render();
-        } catch (err) {
-          console.error("Failed to toggle favorite:", err);
-          btn.disabled = false;
+      btn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (ev.is_favorited) {
+          // Already watching — a click just stops, no need to ask how.
+          btn.disabled = true;
+          try {
+            await toggleFavorite(ev, ev.favorite_scope || "activity");
+          } catch (err) {
+            console.error("Failed to stop watching:", err);
+            btn.disabled = false;
+          }
+          return;
         }
+        openStarMenu(btn, ev);
       });
       return btn;
     }

@@ -346,6 +346,54 @@ main {
 .favorite-btn.favorited {
   color: #f5a623;
 }
+/* A one-off watch is distinguished from a standing one, so the list shows
+   at a glance which stars will keep working next week. */
+.favorite-btn.favorited-once {
+  color: var(--brand);
+}
+
+.event-title-row {
+  position: relative;
+}
+
+.star-menu {
+  position: absolute;
+  top: calc(100% + 0.25rem);
+  left: 0;
+  z-index: 60;
+  min-width: 210px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  padding: 0.3rem;
+  display: flex;
+  flex-direction: column;
+}
+
+.star-menu-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  text-align: left;
+  background: none;
+  border: none;
+  font-family: inherit;
+  padding: 0.5rem 0.6rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.star-menu-item:hover { background: var(--gray-bg); }
+
+.star-menu-label {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+}
+.star-menu-sub {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+}
 .favorite-btn:disabled {
   opacity: 0.5;
   cursor: default;

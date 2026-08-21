@@ -19,6 +19,22 @@ _ADDITIVE_MIGRATIONS = (
     "ALTER TABLE favorites ADD COLUMN IF NOT EXISTS "
     "location VARCHAR(255) NOT NULL DEFAULT ''",
     "ALTER TABLE favorites ALTER COLUMN course_id DROP NOT NULL",
+    # Watches can be activity-wide or a single dated session.
+    "ALTER TABLE favorites ADD COLUMN IF NOT EXISTS "
+    "scope VARCHAR(20) NOT NULL DEFAULT 'activity'",
+    "ALTER TABLE favorites ADD COLUMN IF NOT EXISTS "
+    "session_date VARCHAR(10) NOT NULL DEFAULT ''",
+    "ALTER TABLE favorites DROP CONSTRAINT IF EXISTS uq_favorite_user_activity",
+    """
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'uq_favorite_user_watch'
+      ) THEN
+        ALTER TABLE favorites ADD CONSTRAINT uq_favorite_user_watch
+          UNIQUE (user_id, source_name, event_name, location, scope, session_date);
+      END IF;
+    END $$;
+    """,
 )
 
 
@@ -86,13 +102,24 @@ class Favorite(db.Model):
     location = db.Column(db.String(255), nullable=False, default="")
     course_id = db.Column(db.String(50))
 
+    # "activity" watches every session of this activity indefinitely.
+    # "session" watches one dated occurrence and removes itself once it has
+    # alerted, or once that date has passed.
+    scope = db.Column(db.String(20), nullable=False, default="activity")
+    # Empty for activity-wide watches; the ISO date for one-off ones. Empty
+    # rather than NULL so the uniqueness constraint actually applies —
+    # Postgres treats NULLs as distinct.
+    session_date = db.Column(db.String(10), nullable=False, default="")
+
     __table_args__ = (
         db.UniqueConstraint(
             "user_id",
             "source_name",
             "event_name",
             "location",
-            name="uq_favorite_user_activity",
+            "scope",
+            "session_date",
+            name="uq_favorite_user_watch",
         ),
     )
 

@@ -129,27 +129,48 @@ def _activity_key(source_name: str, event_name: str, location: str) -> tuple:
     return (source_name or "", event_name or "", location or "")
 
 
-def _favorited_keys() -> set[tuple]:
+def _favorited_keys() -> tuple[set, set]:
+    """(activity-wide watches, single-session watches) for the current user."""
     if not _is_logged_in():
-        return set()
-    keys = set()
+        return set(), set()
+    activity_keys, session_keys = set(), set()
     for f in current_user.favorites:
-        keys.add(_activity_key(f.source_name, f.event_name, f.location))
+        if f.scope == "session":
+            session_keys.add(
+                (f.source_name or "", f.event_name or "", f.location or "", f.session_date or "")
+            )
+            continue
+        activity_keys.add(_activity_key(f.source_name, f.event_name, f.location))
         if not f.location:
             # Legacy star with no venue recorded: match the name anywhere.
-            keys.add((f.source_name or "", f.event_name or "", None))
-    return keys
+            activity_keys.add((f.source_name or "", f.event_name or "", None))
+    return activity_keys, session_keys
 
 
 def _annotate_favorites(events: list[dict]) -> list[dict]:
     # Cached event dicts are shared across all requests/users — never mutate
     # them in place, or one user's favorite would leak into everyone's view.
-    favorited = _favorited_keys()
+    activity_keys, session_keys = _favorited_keys()
     out = []
     for e in events:
-        key = _activity_key(e.get("source_name"), e.get("event_name"), e.get("location"))
-        wildcard = (e.get("source_name") or "", e.get("event_name") or "", None)
-        out.append({**e, "is_favorited": key in favorited or wildcard in favorited})
+        source = e.get("source_name") or ""
+        name = e.get("event_name") or ""
+        location = e.get("location") or ""
+        watched_activity = (
+            (source, name, location) in activity_keys
+            or (source, name, None) in activity_keys
+        )
+        watched_session = (source, name, location, e.get("date") or "") in session_keys
+        out.append(
+            {
+                **e,
+                "is_favorited": watched_activity or watched_session,
+                # Lets the UI say which kind of watch is in effect.
+                "favorite_scope": "activity"
+                if watched_activity
+                else ("session" if watched_session else None),
+            }
+        )
     return out
 
 
@@ -296,26 +317,31 @@ def api_favorites():
         event_name = (body.get("event_name") or "").strip()
         location = (body.get("location") or "").strip()
         course_id = (body.get("course_id") or "").strip() or None
+        scope = "session" if body.get("scope") == "session" else "activity"
+        session_date = (body.get("date") or "").strip() if scope == "session" else ""
         if not source_name or not event_name:
             return jsonify({"error": "source_name and event_name are required"}), 400
+        if scope == "session" and not session_date:
+            return jsonify({"error": "date is required for a session watch"}), 400
 
-        # One star covers the activity at this venue, however many recurring
-        # slots the portal splits it into. Legacy rows with no venue recorded
-        # are matched too, so unstarring clears them.
-        matches = [
+        # Any existing watch covering this event is cleared, whichever kind it
+        # is — so a second click always means "stop watching this", and you
+        # can't end up with overlapping activity and session watches.
+        existing = [
             f
             for f in Favorite.query.filter_by(
                 user_id=current_user.id,
                 source_name=source_name,
                 event_name=event_name,
             ).all()
-            if f.location == location or not f.location
+            if (f.location == location or not f.location)
+            and (f.scope != "session" or f.session_date == session_date or not session_date)
         ]
-        if matches:
-            for f in matches:
+        if existing:
+            for f in existing:
                 db.session.delete(f)
             db.session.commit()
-            return jsonify({"favorited": False})
+            return jsonify({"favorited": False, "scope": None})
 
         db.session.add(
             Favorite(
@@ -324,10 +350,12 @@ def api_favorites():
                 event_name=event_name,
                 location=location,
                 course_id=course_id,
+                scope=scope,
+                session_date=session_date,
             )
         )
         db.session.commit()
-        return jsonify({"favorited": True})
+        return jsonify({"favorited": True, "scope": scope})
 
     return jsonify(
         [
@@ -335,6 +363,8 @@ def api_favorites():
                 "source_name": f.source_name,
                 "event_name": f.event_name,
                 "location": f.location,
+                "scope": f.scope,
+                "date": f.session_date or None,
             }
             for f in current_user.favorites
         ]
