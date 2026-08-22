@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Delete your account · Activity Schedule Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+</head>
+<body>
+<header class="topbar">
+  <h1>Delete your account</h1>
+  <div class="topbar-meta">
+    <a class="login-link" href="{{ url_for('index') }}">← Back to schedule</a>
+  </div>
+</header>
+
+<main class="doc-page">
+  <h2>What gets deleted</h2>
+  <p>Everything held about you, permanently and straight away:</p>
+  <ul>
+    <li>Your profile — email, name and profile picture from Google sign-in</li>
+    <li>Your saved filter preferences</li>
+    <li>Every activity you're watching</li>
+    <li>Notification subscriptions on all your devices</li>
+  </ul>
+  <p>
+    This cannot be undone. You can sign in again later, which creates a new
+    empty account. Nothing is kept in the meantime.
+  </p>
+  <p class="doc-note">
+    Registrations you made on a city's own booking system are held by that
+    city, not by this app, and are unaffected. Contact the city directly for
+    those.
+  </p>
+
+  {% if logged_in %}
+  <h2>Delete now</h2>
+  <p>You're signed in as <strong>{{ current_user_name }}</strong>.</p>
+  <div id="delete-area">
+    <button id="delete-account-btn" type="button" class="btn-danger">Delete my account and data</button>
+    <div id="delete-confirm" hidden>
+      <p class="doc-warning">This permanently deletes your account. Are you sure?</p>
+      <button id="delete-cancel-btn" type="button" class="btn-secondary">Cancel</button>
+      <button id="delete-confirm-btn" type="button" class="btn-danger">Yes, delete everything</button>
+    </div>
+    <p id="delete-status" class="doc-note" hidden></p>
+  </div>
+  {% else %}
+  <h2>Sign in to delete</h2>
+  <p>
+    Sign in with the Google account you want removed, then return here — this
+    confirms the account is yours before anything is deleted.
+  </p>
+  {% if accounts_enabled %}
+  <p><a class="google-signin-btn" href="{{ url_for('auth.login_google') }}">Sign in with Google</a></p>
+  {% endif %}
+  <p>
+    If you can't sign in, email
+    <a href="mailto:jack.arthur.eaton@gmail.com">jack.arthur.eaton@gmail.com</a>
+    from the address you signed up with and your account will be deleted
+    manually.
+  </p>
+  {% endif %}
+</main>
+
+<footer>
+  <p><a href="{{ url_for('index') }}">Schedule</a> · <a href="{{ url_for('privacy') }}">Privacy policy</a></p>
+</footer>
+
+<script>
+  (function () {
+    var btn = document.getElementById("delete-account-btn");
+    if (!btn) return;
+    var confirmBox = document.getElementById("delete-confirm");
+    var cancelBtn = document.getElementById("delete-cancel-btn");
+    var confirmBtn = document.getElementById("delete-confirm-btn");
+    var status = document.getElementById("delete-status");
+
+    btn.addEventListener("click", function () {
+      btn.hidden = true;
+      confirmBox.hidden = false;
+    });
+    cancelBtn.addEventListener("click", function () {
+      confirmBox.hidden = true;
+      btn.hidden = false;
+    });
+
+    confirmBtn.addEventListener("click", async function () {
+      confirmBtn.disabled = true;
+      cancelBtn.disabled = true;
+      status.hidden = false;
+      status.textContent = "Deleting…";
+      try {
+        var resp = await fetch("/api/account/delete", { method: "POST" });
+        if (!resp.ok) throw new Error("server returned " + resp.status);
+        confirmBox.hidden = true;
+        status.textContent = "Your account and all its data have been deleted.";
+      } catch (err) {
+        console.error("Account deletion failed:", err);
+        status.textContent =
+          "Couldn't delete the account: " + (err && err.message) +
+          ". Please email jack.arthur.eaton@gmail.com and it'll be done manually.";
+        confirmBtn.disabled = false;
+        cancelBtn.disabled = false;
+      }
+    });
+  })();
+</script>
+</body>
+</html>

@@ -169,11 +169,20 @@
       <button id="pref-skip-btn" type="button" class="btn-secondary">Skip for now</button>
       <button id="pref-save-btn" type="button" class="btn-primary">Save preferences</button>
     </div>
+
+    {% if logged_in %}
+    <div class="modal-footnote">
+      <a href="{{ url_for('account_delete_page') }}">Delete my account and data</a>
+      ·
+      <a href="{{ url_for('privacy') }}">Privacy</a>
+    </div>
+    {% endif %}
   </div>
 </div>
 
 <footer>
   <p>Sources: {{ source_names|join(', ') }} (PerfectMind public schedule widgets) &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>
+  <p><a href="{{ url_for('privacy') }}">Privacy policy</a></p>
   {% if accounts_enabled %}
   <p id="watch-status" class="watch-status">Checking alert watcher…</p>
   {% endif %}

@@ -18,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
-from flask_login import current_user
+from flask_login import current_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
@@ -207,6 +207,45 @@ def index():
         login_links=_login_links(),
         source_names=source_names,
     )
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html", source_names=sorted({s["source_name"] for s in config.SOURCES}))
+
+
+@app.route("/account/delete")
+def account_delete_page():
+    """Publicly reachable deletion page.
+
+    Google Play requires account deletion to be requestable from a web page
+    that does not require installing the app, in addition to the in-app path.
+    """
+    return render_template("delete_account.html")
+
+
+@app.route("/api/account/delete", methods=["POST"])
+def api_account_delete():
+    if not _is_logged_in():
+        return jsonify({"error": "not authenticated"}), 401
+
+    user = current_user._get_current_object()
+    user_id = user.id
+
+    # Delete dependants explicitly rather than relying on cascade, so a
+    # misconfigured relationship can't silently leave someone's data behind
+    # after we've told them it was removed.
+    removed = {
+        "favorites": Favorite.query.filter_by(user_id=user_id).delete(),
+        "preferences": Preference.query.filter_by(user_id=user_id).delete(),
+        "push_subscriptions": PushSubscription.query.filter_by(user_id=user_id).delete(),
+    }
+    logout_user()
+    db.session.delete(user)
+    db.session.commit()
+
+    logger.info("Deleted account %s and its data: %s", user_id, removed)
+    return jsonify({"deleted": True, "removed": removed})
 
 
 @app.route("/api/watch-status")

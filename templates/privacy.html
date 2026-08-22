@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy · Activity Schedule Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+</head>
+<body>
+<header class="topbar">
+  <h1>Privacy Policy</h1>
+  <div class="topbar-meta">
+    <a class="login-link" href="{{ url_for('index') }}">← Back to schedule</a>
+  </div>
+</header>
+
+<main class="doc-page">
+  <p class="doc-updated">Last updated 21 August 2026</p>
+
+  <p>
+    Activity Schedule Dashboard shows public drop-in recreation schedules from
+    {{ source_names|join(' and ') }}, and can alert you when a spot opens in an
+    activity you've chosen to watch. This page explains exactly what it stores
+    and how to remove it.
+  </p>
+
+  <p>
+    It is an unofficial, personal project. It is not affiliated with, endorsed
+    by, or operated by any municipality.
+  </p>
+
+  <h2>Using it without an account</h2>
+  <p>
+    You can browse every schedule without signing in. In that case nothing is
+    stored on the server about you. Your filter preferences are saved only in
+    your own browser's local storage, and clearing your browser data removes
+    them.
+  </p>
+
+  <h2>What is stored if you sign in</h2>
+  <p>Signing in is optional, and only needed to watch activities and receive alerts.</p>
+  <ul>
+    <li>
+      <strong>From your Google account:</strong> your email address, name,
+      profile picture URL, and the account identifier Google provides.
+      <strong>No password is ever received or stored</strong> — Google performs
+      the sign-in and only confirms who you are.
+    </li>
+    <li>
+      <strong>Your preferences:</strong> the activity and location filters you
+      set as defaults, and whether you opted in to email alerts.
+    </li>
+    <li>
+      <strong>Activities you watch:</strong> the name and venue of each starred
+      activity, and for one-off watches, the date.
+    </li>
+    <li>
+      <strong>Notification details:</strong> if you enable alerts, the push
+      subscription your browser generates for each device. This identifies the
+      browser to a push service, not you personally.
+    </li>
+  </ul>
+
+  <h2>What is never collected</h2>
+  <ul>
+    <li>Passwords, for this app or for any city's booking system</li>
+    <li>Payment or financial information — all registration and payment happens on the city's own site</li>
+    <li>Location data, contacts, photos, or anything else from your device</li>
+    <li>Analytics or advertising trackers — there are none</li>
+  </ul>
+
+  <h2>How it is used</h2>
+  <p>
+    Only to run the features you asked for: to show your saved filters, to know
+    which activities to watch, and to send you an alert when one opens.
+    <strong>Your information is never sold, and never shared for advertising.</strong>
+  </p>
+
+  <h2>Services it relies on</h2>
+  <ul>
+    <li><strong>Google</strong> — sign-in, and delivery of push notifications</li>
+    <li><strong>Brevo</strong> — sending alert emails, if you opt in</li>
+    <li><strong>Neon</strong> — the database holding the information above</li>
+    <li><strong>Render</strong> — hosting</li>
+  </ul>
+  <p>
+    Schedules are read from each city's public booking system. Nothing about
+    you is sent to them by this app; when you tap through to register, you are
+    on their site under their own privacy policy.
+  </p>
+
+  <h2>Deleting your data</h2>
+  <p>
+    You can delete your account and everything listed above at any time, and it
+    is removed immediately and permanently rather than deactivated.
+  </p>
+  <ul>
+    <li>In the app: <strong>Menu → Preferences → Delete my account</strong></li>
+    <li>Or from this page: <a href="{{ url_for('account_delete_page') }}">Delete your account</a></li>
+  </ul>
+  <p>
+    Deleting removes your profile, preferences, watched activities and
+    notification subscriptions. You can sign in again afterwards, which creates
+    a fresh empty account.
+  </p>
+
+  <h2>Contact</h2>
+  <p>
+    For any question about your data, contact
+    <a href="mailto:jack.arthur.eaton@gmail.com">jack.arthur.eaton@gmail.com</a>.
+  </p>
+</main>
+
+<footer>
+  <p><a href="{{ url_for('index') }}">Schedule</a> · <a href="{{ url_for('account_delete_page') }}">Delete account</a></p>
+</footer>
+</body>
+</html>
