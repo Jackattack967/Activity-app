@@ -507,6 +507,16 @@ footer a { color: var(--text-muted); }
   color: var(--text-muted);
   font-size: 0.85rem;
 }
+/* For disclosures that must stand out rather than recede — the cross-border
+   storage notice above all. Muting that one in .doc-note undercut the whole
+   point of disclosing it. */
+.doc-callout {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--brand);
+  border-radius: 6px;
+  padding: 0.9rem 1.1rem;
+}
 .doc-warning {
   color: var(--red);
   font-weight: 600;

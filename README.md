@@ -98,6 +98,12 @@ dashboard with none set. Each group only switches on an optional feature
 
 `.env` is gitignored and must never be committed.
 
+## License
+
+This project's own code is released under the [MIT License](LICENSE). The
+third-party packages it depends on keep their own licenses — see
+[`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
+
 ## Credits
 
 Built with open-source software. Every third-party package and its license is
