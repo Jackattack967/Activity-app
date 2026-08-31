@@ -55,6 +55,10 @@ missing_env = [name for name in ACCOUNT_ENV_VARS if not os.environ.get(name)]
 # it's unset, those pages fall back to pointing at the in-app deletion flow.
 CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "").strip()
 
+# Display names for the email providers watcher.email_provider() can return,
+# so the privacy policy can name the one actually handling alert emails.
+EMAIL_PROVIDER_NAMES = {"brevo": "Brevo", "resend": "Resend"}
+
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
 ACCOUNTS_ENABLED = False
@@ -524,6 +528,9 @@ def inject_user():
         "push_enabled": bool(os.environ.get("VAPID_PUBLIC_KEY")) and ACCOUNTS_ENABLED,
         "email_alerts_available": watcher.email_provider() is not None,
         "contact_email": CONTACT_EMAIL,
+        # The privacy policy has to name the processor that actually handles
+        # alert emails, and which one that is depends on which API key is set.
+        "email_provider_name": EMAIL_PROVIDER_NAMES.get(watcher.email_provider()),
     }
 
 

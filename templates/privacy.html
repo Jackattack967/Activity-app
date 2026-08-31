@@ -16,13 +16,13 @@
 </header>
 
 <main class="doc-page">
-  <p class="doc-updated">Last updated 21 August 2026</p>
+  <p class="doc-updated">Last updated 31 August 2026</p>
 
   <p>
     Activity Schedule Dashboard shows public drop-in recreation schedules from
     {{ source_names|join(' and ') }}, and can alert you when a spot opens in an
-    activity you've chosen to watch. This page explains exactly what it stores
-    and how to remove it.
+    activity you've chosen to watch. This page explains exactly what it stores,
+    who else sees it, where it is kept, and how to remove it.
   </p>
 
   <p>
@@ -32,10 +32,18 @@
 
   <h2>Using it without an account</h2>
   <p>
-    You can browse every schedule without signing in. In that case nothing is
-    stored on the server about you. Your filter preferences are saved only in
-    your own browser's local storage, and clearing your browser data removes
-    them.
+    You can browse every schedule without signing in. No account is created, no
+    cookies are set, and your filter choices are saved only in your own
+    browser's local storage — clearing your browser data removes them.
+  </p>
+  <p>
+    Two things still happen, as they do on any website. The server that hosts
+    this site keeps standard request logs — your IP address, the time, the page
+    requested, and your browser's user-agent string — which are used to keep the
+    site running and to investigate faults and abuse, not to build a profile of
+    you. And your internet provider and the hosting provider necessarily carry
+    the traffic. There is no analytics service and there are no advertising
+    trackers on this site.
   </p>
 
   <h2>What is stored if you sign in</h2>
@@ -60,6 +68,9 @@
       subscription your browser generates for each device. This identifies the
       browser to a push service, not you personally.
     </li>
+    <li>
+      <strong>The date your account was created.</strong>
+    </li>
   </ul>
 
   <h2>What is never collected</h2>
@@ -74,21 +85,122 @@
   <p>
     Only to run the features you asked for: to show your saved filters, to know
     which activities to watch, and to send you an alert when one opens.
-    <strong>Your information is never sold, and never shared for advertising.</strong>
+    <strong>Your information is never sold, rented, traded, or used for
+    advertising</strong>, and it is never disclosed to anyone for their own
+    purposes.
   </p>
 
-  <h2>Services it relies on</h2>
+  <h2>Who else handles your information</h2>
+  <p>
+    Running this app does mean other companies handle your information on its
+    behalf. They are permitted to use it only to perform the job described here,
+    and not for anything of their own. This is the complete list:
+  </p>
   <ul>
-    <li><strong>Google</strong> — sign-in, and delivery of push notifications</li>
-    <li><strong>Brevo</strong> — sending alert emails, if you opt in</li>
-    <li><strong>Neon</strong> — the database holding the information above</li>
-    <li><strong>Render</strong> — hosting</li>
+    <li>
+      <strong>Render</strong> — hosts the app. All traffic to this site passes
+      through Render's servers, and its request logs are described above.
+    </li>
+    <li>
+      <strong>Neon</strong> — provides the database that holds everything listed
+      under "What is stored if you sign in".
+    </li>
+    <li>
+      <strong>Google</strong> — performs the sign-in, so Google knows you have
+      signed in to this app. If you are signed in, your profile picture is
+      loaded directly from Google's servers when a page opens, so your browser
+      contacts Google at that moment.
+    </li>
+    <li>
+      <strong>Your browser's push service</strong> — for browser notifications:
+      Google for Chrome and Edge, Mozilla for Firefox, Apple for Safari. The
+      service delivers the notification to your device, but the contents are
+      encrypted so it cannot read them. It can see that a message was sent to
+      your device and when.
+    </li>
+    {% if email_provider_name %}
+    <li>
+      <strong>{{ email_provider_name }}</strong> — sends alert emails, only if
+      you turn email alerts on. It receives your email address and the contents
+      of the alert.
+    </li>
+    {% endif %}
   </ul>
   <p>
-    Schedules are read from each city's public booking system. Nothing about
-    you is sent to them by this app; when you tap through to register, you are
-    on their site under their own privacy policy.
+    Schedules are read from each city's public booking system by the server, not
+    by your browser. Nothing about you is sent to those systems by this app. When
+    you tap through to register you are on the city's own site, under their
+    privacy policy, and anything you do there is between you and the city.
   </p>
+
+  <h2>Where your information is stored</h2>
+  <p class="doc-note">
+    <strong>Your information is stored and processed outside Canada.</strong>
+    Render and Neon are United States companies and hold the app and its
+    database on servers in the United States.{% if email_provider_name == "Resend" %}
+    Resend is also a United States company.{% elif email_provider_name == "Brevo" %}
+    Brevo is a French company and processes alert emails in the European
+    Union.{% endif %} Google operates globally.
+  </p>
+  <p>
+    While information is in another country it is subject to that country's laws,
+    and courts, law enforcement and national security authorities there may be
+    able to compel access to it without notice to you. Using this app with an
+    account means accepting that. If you would rather not, you can use the
+    dashboard without signing in — nothing about you is stored then.
+  </p>
+
+  <h2>How long it is kept</h2>
+  <ul>
+    <li>
+      <strong>Your account and everything attached to it</strong> is kept until
+      you delete it. Deleting is immediate and permanent (see below).
+    </li>
+    <li>
+      <strong>One-off watches</strong> for a single date are deleted
+      automatically once that date has passed.
+    </li>
+    <li>
+      <strong>Push subscriptions</strong> are deleted automatically when your
+      browser reports that they have expired.
+    </li>
+    <li>
+      <strong>Server request logs</strong> are kept for as long as the hosting
+      provider retains them, which is a short rolling window, and are then
+      discarded.
+    </li>
+  </ul>
+
+  <h2>Cookies</h2>
+  <p>
+    One cookie is used, and only after you sign in: a session cookie that keeps
+    you signed in. It contains no advertising or tracking identifier. Browsing
+    without signing in sets no cookies at all. There are no third-party cookies.
+  </p>
+
+  <h2>Your choices and your rights</h2>
+  <ul>
+    <li>
+      <strong>Don't sign in.</strong> Every schedule is visible without an
+      account, and nothing about you is stored.
+    </li>
+    <li>
+      <strong>Turn alerts off</strong> at any time under
+      <strong>Menu → Preferences</strong>, separately for email and for browser
+      notifications. Turning email alerts off stops all alert email immediately.
+    </li>
+    <li>
+      <strong>See what is held about you, and have it corrected.</strong> Under
+      Canadian and British Columbia privacy law you may ask for a copy of the
+      personal information held about you and ask for anything inaccurate to be
+      fixed. Your name, email and picture come from your Google account —
+      correcting them in Google and signing in again is usually the fastest fix.
+    </li>
+    <li>
+      <strong>Withdraw consent</strong> by deleting your account, which removes
+      everything at once.
+    </li>
+  </ul>
 
   <h2>Deleting your data</h2>
   <p>
@@ -105,10 +217,36 @@
     a fresh empty account.
   </p>
 
-  <h2>Contact</h2>
+  <h2>Security</h2>
+  <p>
+    The site is served over HTTPS, so traffic between your device and the server
+    is encrypted. Sign-in is handled by Google, so this app never sees a
+    password. Access to the database is limited to the app itself. No online
+    service can promise perfect security, but nothing is stored that is not
+    needed for a feature you asked for.
+  </p>
+
+  <h2>Children</h2>
+  <p>
+    Signing in requires a Google account, which Google does not issue to
+    children under 13. Accounts on this app are therefore intended for people
+    aged 13 and over. Anyone of any age can browse the schedules without signing
+    in, since that stores nothing. If you believe a child under 13 has created an
+    account, use the deletion page above, or get in touch and it will be removed.
+  </p>
+
+  <h2>Changes to this policy</h2>
+  <p>
+    If what is collected or who handles it changes, this page is updated and the
+    "last updated" date at the top changes with it. Material changes affecting
+    signed-in users will also be shown in the app.
+  </p>
+
+  <h2>Contact and complaints</h2>
   {% if contact_email %}
   <p>
-    For any question about your data, contact
+    For any question about your data, or to make an access or correction
+    request, contact
     <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
   </p>
   {% else %}
@@ -117,6 +255,13 @@
     <a href="{{ url_for('account_delete_page') }}">delete your account</a> page.
   </p>
   {% endif %}
+  <p class="doc-note">
+    If you are not satisfied with the response, you can complain to the
+    <a href="https://www.oipc.bc.ca/" rel="noopener">Office of the Information
+    and Privacy Commissioner for British Columbia</a>, or to the
+    <a href="https://www.priv.gc.ca/" rel="noopener">Office of the Privacy
+    Commissioner of Canada</a>.
+  </p>
 </main>
 
 <footer>
