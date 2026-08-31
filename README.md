@@ -84,3 +84,28 @@ Only cities using PerfectMind's `BookMe4` widget work as-is. To add one:
 
 A different booking platform (ActiveNet, RecTrac, Amilia, etc.) would need
 its own scraper module, since each has a different API/HTML shape.
+
+## Configuration
+
+All configuration is done through environment variables — nothing secret or
+personal is stored in this repo. Copy [`.env.example`](.env.example) to `.env`
+and fill it in for local development; on Render, the same variables are
+declared in [`render.yaml`](render.yaml) and entered once in the dashboard.
+
+None of them are required to browse schedules: the app boots and serves the
+dashboard with none set. Each group only switches on an optional feature
+(accounts, push notifications, email alerts, the scheduled watch check).
+
+`.env` is gitignored and must never be committed.
+
+## Credits
+
+Built with open-source software. Every third-party package and its license is
+listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) — chiefly
+[Flask](https://flask.palletsprojects.com/), [SQLAlchemy](https://www.sqlalchemy.org/),
+[Authlib](https://authlib.org/), [Requests](https://requests.readthedocs.io/),
+[Gunicorn](https://gunicorn.org/) and [pywebpush](https://github.com/web-push-libs/pywebpush).
+
+Schedule data comes from the public booking portals of the City of Coquitlam
+and the City of Port Moody. This project is unofficial and is not affiliated
+with, endorsed by, or operated by either city or by PerfectMind.

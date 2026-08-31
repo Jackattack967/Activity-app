@@ -48,6 +48,13 @@ ACCOUNT_ENV_VARS = (
 )
 missing_env = [name for name in ACCOUNT_ENV_VARS if not os.environ.get(name)]
 
+# Public contact address shown on the privacy and account-deletion pages.
+# Deliberately not hard-coded: the operator's address is deployment config,
+# not source code, so the repo can be public without publishing it. Set it to
+# a role address (e.g. privacy@yourdomain.ca) rather than a personal one. If
+# it's unset, those pages fall back to pointing at the in-app deletion flow.
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "").strip()
+
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
 ACCOUNTS_ENABLED = False
@@ -516,6 +523,7 @@ def inject_user():
         "vapid_public_key": os.environ.get("VAPID_PUBLIC_KEY", ""),
         "push_enabled": bool(os.environ.get("VAPID_PUBLIC_KEY")) and ACCOUNTS_ENABLED,
         "email_alerts_available": watcher.email_provider() is not None,
+        "contact_email": CONTACT_EMAIL,
     }
 
 

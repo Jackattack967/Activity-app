@@ -55,12 +55,14 @@
   {% if accounts_enabled %}
   <p><a class="google-signin-btn" href="{{ url_for('auth.login_google') }}">Sign in with Google</a></p>
   {% endif %}
+  {% if contact_email %}
   <p>
     If you can't sign in, email
-    <a href="mailto:jack.arthur.eaton@gmail.com">jack.arthur.eaton@gmail.com</a>
+    <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
     from the address you signed up with and your account will be deleted
     manually.
   </p>
+  {% endif %}
   {% endif %}
 </main>
 
@@ -76,6 +78,9 @@
     var cancelBtn = document.getElementById("delete-cancel-btn");
     var confirmBtn = document.getElementById("delete-confirm-btn");
     var status = document.getElementById("delete-status");
+    // tojson renders a proper quoted JS string (or "" when unset), so the
+    // address never has to be written into this file.
+    var contactEmail = {{ (contact_email or "")|tojson }};
 
     btn.addEventListener("click", function () {
       btn.hidden = true;
@@ -100,7 +105,9 @@
         console.error("Account deletion failed:", err);
         status.textContent =
           "Couldn't delete the account: " + (err && err.message) +
-          ". Please email jack.arthur.eaton@gmail.com and it'll be done manually.";
+          (contactEmail
+            ? ". Please email " + contactEmail + " and it'll be done manually."
+            : ". Please try again in a few minutes.");
         confirmBtn.disabled = false;
         cancelBtn.disabled = false;
       }

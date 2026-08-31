@@ -106,10 +106,17 @@
   </p>
 
   <h2>Contact</h2>
+  {% if contact_email %}
   <p>
     For any question about your data, contact
-    <a href="mailto:jack.arthur.eaton@gmail.com">jack.arthur.eaton@gmail.com</a>.
+    <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
   </p>
+  {% else %}
+  <p>
+    You can remove everything held about you yourself, at any time, from the
+    <a href="{{ url_for('account_delete_page') }}">delete your account</a> page.
+  </p>
+  {% endif %}
 </main>
 
 <footer>

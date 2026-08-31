@@ -51,3 +51,8 @@ services:
         sync: false
       - key: ALERT_FROM_EMAIL
         sync: false
+      # Address shown as the privacy contact on /privacy and /account/delete.
+      # Not a secret, but kept out of the repo so a public repo doesn't
+      # publish it. Prefer a role address over a personal one.
+      - key: CONTACT_EMAIL
+        sync: false
