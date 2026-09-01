@@ -51,6 +51,20 @@ services:
         sync: false
       - key: ALERT_FROM_EMAIL
         sync: false
+      # CASL requires every alert email to identify who sent it and give a
+      # mailing address where they can be reached. Both are kept out of the
+      # repo: a real postal address must not be committed to a public repo.
+      # Without both set, alert emails are refused rather than sent
+      # non-compliant; push notifications are unaffected.
+      - key: SENDER_NAME
+        sync: false
+      - key: SENDER_MAILING_ADDRESS
+        sync: false
+      # Base URL used to build unsubscribe links in emails. Render sets
+      # RENDER_EXTERNAL_URL automatically, so this is only needed once a
+      # custom domain replaces the onrender.com address.
+      - key: PUBLIC_BASE_URL
+        sync: false
       # Address shown as the privacy contact on /privacy and /account/delete.
       # Not a secret, but kept out of the repo so a public repo doesn't
       # publish it. Prefer a role address over a personal one.

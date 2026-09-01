@@ -21,10 +21,13 @@ import json
 import logging
 import os
 
+from urllib.parse import quote
+
 import requests
 from pywebpush import WebPushException, webpush
 
 from models import EventState, Favorite, PushSubscription, WatchRun, db
+from tokens import make_unsubscribe_token
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,52 @@ def send_push(subscription: PushSubscription, payload: dict) -> bool:
         return True
 
 
+def public_base_url() -> str:
+    """Absolute base URL of this deployment, for links inside emails.
+
+    Render sets RENDER_EXTERNAL_URL automatically, so this normally needs no
+    configuration; PUBLIC_BASE_URL overrides it for a custom domain.
+    """
+    base = (
+        os.environ.get("PUBLIC_BASE_URL")
+        or os.environ.get("RENDER_EXTERNAL_URL")
+        or ""
+    ).strip()
+    return base.rstrip("/")
+
+
+def sender_identity() -> tuple[str, str] | None:
+    """(name, mailing address) identifying the sender, or None if unset.
+
+    CASL requires every commercial electronic message to identify who sent
+    it and give a mailing address where they can be reached. Both come from
+    the environment so a real postal address is never committed to the repo.
+    """
+    name = (os.environ.get("SENDER_NAME") or "").strip()
+    address = (os.environ.get("SENDER_MAILING_ADDRESS") or "").strip()
+    if not name or not address:
+        return None
+    return name, address
+
+
+def email_compliance_gap() -> str | None:
+    """Why alert email cannot lawfully be sent, or None if it can.
+
+    Alert emails are commercial electronic messages under CASL, which
+    requires a working unsubscribe mechanism and sender identification in
+    the message itself. If either is unavailable the message would be
+    unlawful to send, so sending is refused rather than sent incomplete.
+    """
+    if not public_base_url():
+        return (
+            "neither PUBLIC_BASE_URL nor RENDER_EXTERNAL_URL is set, so no "
+            "unsubscribe link can be built"
+        )
+    if sender_identity() is None:
+        return "SENDER_NAME and SENDER_MAILING_ADDRESS are not both set"
+    return None
+
+
 def email_provider() -> str | None:
     """Which email provider is configured, if any.
 
@@ -84,12 +133,28 @@ def email_provider() -> str | None:
     return None
 
 
-def send_email(to_address: str, event: dict) -> bool:
+def send_email(to_address: str, event: dict, user_id: int) -> bool:
     """Email one 'a spot opened' alert. Best-effort: a mail failure must
     never abort the watch run or block push delivery."""
     provider = email_provider()
     if provider is None:
         return False
+
+    gap = email_compliance_gap()
+    if gap is not None:
+        logger.error(
+            "Refusing to send alert email: %s. Alert emails must carry an "
+            "unsubscribe link and a sender mailing address, so none will be "
+            "sent until this is configured. Push alerts are unaffected.",
+            gap,
+        )
+        return False
+
+    sender_name, sender_address = sender_identity()
+    unsubscribe_url = (
+        f"{public_base_url()}/unsubscribe"
+        f"?token={quote(make_unsubscribe_token(user_id), safe='')}"
+    )
 
     name = event.get("event_name", "Activity")
     when = f"{event.get('day_of_week', '')} {event.get('start_time', '')}".strip()
@@ -108,10 +173,29 @@ def send_email(to_address: str, event: dict) -> bool:
       <p style="color:#6b7280;font-size:12px">
         Spots go quickly — this link opens the city's official registration page.
       </p>
+      <hr style="border:none;border-top:1px solid #e2e5ea;margin:20px 0">
+      <p style="color:#6b7280;font-size:12px">
+        You are receiving this because you turned on email alerts for
+        Activity Schedule Dashboard.
+        <a href="{html.escape(unsubscribe_url)}">Unsubscribe from these emails</a>.
+        Browser notifications, if you use them, are unaffected.
+      </p>
+      <p style="color:#6b7280;font-size:12px">
+        {html.escape(sender_name)}<br>
+        {html.escape(sender_address)}
+      </p>
     """
 
     subject = f"Spot open: {name}"
     sender = os.environ.get("ALERT_FROM_EMAIL", "onboarding@resend.dev")
+
+    # Lets Gmail and other clients show their own unsubscribe button, and
+    # honours the one-click convention (RFC 8058) by POSTing to the same URL.
+    # Bulk senders without these are far more likely to be filtered as spam.
+    unsubscribe_headers = {
+        "List-Unsubscribe": f"<{unsubscribe_url}>",
+        "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+    }
 
     if provider == "brevo":
         url_endpoint = "https://api.brevo.com/v3/smtp/email"
@@ -125,6 +209,7 @@ def send_email(to_address: str, event: dict) -> bool:
             "to": [{"email": to_address}],
             "subject": subject,
             "htmlContent": f"<html><body>{body}</body></html>",
+            "headers": unsubscribe_headers,
         }
     else:
         url_endpoint = "https://api.resend.com/emails"
@@ -137,6 +222,7 @@ def send_email(to_address: str, event: dict) -> bool:
             "to": [to_address],
             "subject": subject,
             "html": body,
+            "headers": unsubscribe_headers,
         }
 
     try:
@@ -176,7 +262,7 @@ def notify_user(user, event: dict) -> int:
             db.session.delete(sub)
 
     if getattr(user, "email_alerts", False) and user.email:
-        if send_email(user.email, event):
+        if send_email(user.email, event, user.id):
             sent += 1
 
     return sent

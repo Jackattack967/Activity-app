@@ -8,3 +8,6 @@ authlib>=1.3
 psycopg2-binary>=2.9
 python-dotenv>=1.0
 pywebpush>=2.0
+# Already installed as a Flask dependency, but declared explicitly because
+# tokens.py imports it directly to sign unsubscribe links.
+itsdangerous>=2.1

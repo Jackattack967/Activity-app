@@ -25,7 +25,16 @@ import config
 import scraper
 import watcher
 from auth import auth_bp, init_auth
-from models import Favorite, Preference, PushSubscription, WatchRun, db, ensure_schema
+from models import (
+    Favorite,
+    Preference,
+    PushSubscription,
+    User,
+    WatchRun,
+    db,
+    ensure_schema,
+)
+from tokens import read_unsubscribe_token
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +242,51 @@ def account_delete_page():
     that does not require installing the app, in addition to the in-app path.
     """
     return render_template("delete_account.html")
+
+
+@app.route("/unsubscribe", methods=["GET", "POST"])
+def unsubscribe():
+    """Turn off alert emails straight from a link in one, without signing in.
+
+    CASL requires every commercial electronic message to carry an unsubscribe
+    mechanism that keeps working for at least 60 days and does not make the
+    recipient log in first, so the link carries a signed token naming the user
+    instead of relying on a session.
+
+    GET only asks for confirmation. Mail clients and security scanners follow
+    links in messages to check them, and a GET that unsubscribed immediately
+    would silently switch alerts off for people who never clicked. POST does
+    the work, which is also what RFC 8058 one-click unsubscribe sends.
+
+    Only email alerts are affected: push notifications are a separate channel
+    that CASL does not govern, and silently dropping those too would surprise
+    someone who only meant to stop the email.
+    """
+    if not ACCOUNTS_ENABLED:
+        return render_template("unsubscribe.html", state="unavailable"), 503
+
+    user_id = read_unsubscribe_token(request.values.get("token", ""))
+    if user_id is None:
+        return render_template("unsubscribe.html", state="invalid"), 400
+
+    user = db.session.get(User, user_id)
+    if user is None:
+        # The account was deleted, so no email is being sent to it anyway.
+        # From the recipient's point of view that is a success, not an error.
+        return render_template("unsubscribe.html", state="done")
+
+    if request.method == "GET":
+        return render_template(
+            "unsubscribe.html",
+            state="confirm",
+            token=request.values.get("token", ""),
+            already_off=not user.email_alerts,
+        )
+
+    user.email_alerts = False
+    db.session.commit()
+    logger.info("User %s unsubscribed from alert emails", user_id)
+    return render_template("unsubscribe.html", state="done")
 
 
 @app.route("/api/account/delete", methods=["POST"])

@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Email alerts · Activity Schedule Dashboard</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+</head>
+<body>
+<header class="topbar">
+  <h1>Email alerts</h1>
+  <div class="topbar-meta">
+    <a class="login-link" href="{{ url_for('index') }}">← Back to schedule</a>
+  </div>
+</header>
+
+<main class="doc-page">
+  {% if state == "confirm" %}
+    {% if already_off %}
+      <h2>Email alerts are already off</h2>
+      <p>
+        You are not receiving alert emails, so there is nothing to turn off.
+        You can close this page.
+      </p>
+    {% else %}
+      <h2>Turn off alert emails?</h2>
+      <p>
+        This stops every "a spot opened" email. It takes effect straight away
+        and you do not need to sign in.
+      </p>
+      <p class="doc-note">
+        Browser notifications are a separate setting and are not affected. Your
+        account, saved filters and watched activities all stay exactly as they
+        are — you can turn email alerts back on any time under
+        <strong>Menu → Preferences</strong>.
+      </p>
+      <form method="post" action="{{ url_for('unsubscribe') }}">
+        <input type="hidden" name="token" value="{{ token }}">
+        <button type="submit" class="btn-danger">Turn off alert emails</button>
+      </form>
+    {% endif %}
+
+  {% elif state == "done" %}
+    <h2>Alert emails are off</h2>
+    <p>
+      You will not receive any more "a spot opened" emails. Nothing else about
+      your account has changed.
+    </p>
+    <p class="doc-note">
+      Changed your mind? Sign in and turn them back on under
+      <strong>Menu → Preferences</strong>.
+    </p>
+    <p><a href="{{ url_for('index') }}">Back to the schedule</a></p>
+
+  {% elif state == "invalid" %}
+    <h2>This link didn't work</h2>
+    <p>
+      The link is incomplete or has been altered — email programs sometimes
+      break long links across lines. Try opening it from the original email
+      again, or copy the whole address into your browser.
+    </p>
+    <p class="doc-note">
+      If it still won't work, sign in and turn email alerts off under
+      <strong>Menu → Preferences</strong>{% if contact_email %}, or email
+      <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> and it will be
+      done for you{% endif %}.
+    </p>
+
+  {% else %}
+    <h2>Temporarily unavailable</h2>
+    <p>
+      Accounts are not available right now, so this link can't be processed.
+      Please try again shortly.
+    </p>
+    {% if contact_email %}
+    <p class="doc-note">
+      If this keeps happening, email
+      <a href="mailto:{{ contact_email }}">{{ contact_email }}</a> and your alert
+      emails will be turned off manually.
+    </p>
+    {% endif %}
+  {% endif %}
+</main>
+
+<footer>
+  <p><a href="{{ url_for('index') }}">Schedule</a> · <a href="{{ url_for('privacy') }}">Privacy policy</a></p>
+</footer>
+</body>
+</html>
