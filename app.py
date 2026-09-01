@@ -322,10 +322,19 @@ def api_watch_status():
     """
     # Whether each alert channel is configured server-side. Booleans about
     # deployment config only — no keys, and nothing about any user.
+    email_gap = watcher.email_compliance_gap() if watcher.email_provider() else None
     channels = {
         "push_configured": bool(os.environ.get("VAPID_PUBLIC_KEY")),
         "email_configured": watcher.email_provider() is not None,
         "email_provider": watcher.email_provider(),
+        # A provider key alone is not enough to send: alert emails are refused
+        # unless they can also carry an unsubscribe link and a sender mailing
+        # address. That refusal is otherwise silent — the only symptom is
+        # alerts that never arrive — so surface it where it can be checked
+        # without reading the server log. Names the missing variables, never
+        # their values.
+        "email_ready": watcher.email_provider() is not None and email_gap is None,
+        "email_blocked_reason": email_gap,
     }
 
     if not ACCOUNTS_ENABLED:
