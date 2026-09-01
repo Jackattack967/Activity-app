@@ -13,6 +13,18 @@ name: Wake the dashboard and run a watch check
 # curl simply waits through the boot and doesn't care how big the response is,
 # so this workflow does the morning wake-up. Once the app is up, cron-job.org
 # takes over for the frequent checks.
+#
+# It also acts as a safety net for the rest of the day. cron-job.org disables
+# a job automatically after enough consecutive failures, and a run of failures
+# is easy to cause: every redeploy serves the "Application loading" page for a
+# minute or two. That is exactly what happened on 2026-08-31 — a series of
+# deploys tripped the limit, the job switched itself off, and the watcher was
+# dead for over seven hours before anyone noticed. Pinging through the day
+# means an outage like that costs 15 minutes of alerting instead of a day.
+#
+# Redundant pings are cheap: a check with nothing to report just returns its
+# counts. Scheduled workflows are free on public repositories, though GitHub
+# disables them after 60 days with no repository activity.
 
 on:
   schedule:
@@ -22,6 +34,12 @@ on:
     # Repeated attempts because GitHub's scheduler is frequently late and
     # may skip runs entirely under load.
     - cron: "*/10 13-16 * * *"
+    # Safety net across the rest of the waking day. 17:00-23:59 and
+    # 00:00-06:59 UTC is roughly 10:00-22:00 local, matching the hours
+    # cron-job.org covers. Deliberately stops overnight: the free tier is
+    # metered by the hour and nobody needs a 3am alert, so the app is left
+    # to sleep until the morning wake-up above.
+    - cron: "*/15 17-23,0-6 * * *"
   # Lets you trigger it by hand from the Actions tab to test.
   workflow_dispatch:
 
