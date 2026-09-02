@@ -1092,3 +1092,12 @@ footer a { color: var(--text-muted); }
     gap: 0.35rem;
   }
 }
+
+/* Mutes OpenStreetMap's default styling so the markers are the loudest
+   thing on the map. This is what Carto's Positron basemap was doing before
+   it started demanding an API key — done locally instead, so it costs no
+   external service and cannot be withdrawn. Tiles only: the filter is on
+   the tile pane, so markers, popups and controls keep their full colour. */
+.leaflet-tile-pane {
+  filter: saturate(0.68) brightness(1.04) contrast(0.96);
+}

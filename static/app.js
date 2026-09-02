@@ -462,17 +462,16 @@
         zoomControl: true,
       }).setView(MAP_HOME, MAP_HOME_ZOOM);
 
-      // Carto's Positron basemap rather than standard OpenStreetMap tiles:
-      // the default OSM style draws every road label and shop in full
-      // colour, which fights the markers. This one is deliberately muted,
-      // so the pins are the loudest thing on the map. Still OSM data, still
-      // free and keyless — attribution covers both, as their terms require.
-      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+      // OpenStreetMap's own tiles. Carto's Positron basemap was tried here
+      // because it is muted and lets the markers dominate, but it now serves
+      // an "API KEY REQUIRED" placeholder instead of map data — with an HTTP
+      // 200 and a PNG content type, so only looking at the image reveals it.
+      // These need no key and no account.
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
-        subdomains: "abcd",
+        // Required by the OpenStreetMap tile usage policy.
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
-          'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
       }).addTo(map);
 
       L.control.scale({ imperial: false }).addTo(map);
