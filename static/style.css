@@ -968,3 +968,127 @@ footer a { color: var(--text-muted); }
     max-height: 200px;
   }
 }
+
+/* --- Map: markers and chrome --------------------------------------------
+   Leaflet renders markers, popups and controls into its own containers, so
+   these are styled by class rather than by descending from #map-view. */
+
+.venue-marker {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: white;
+  background: var(--text-muted);
+  border: 2.5px solid var(--surface);
+  /* Lifts the pin off the map rather than letting it sit flat in it. */
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+/* Green means something is actually bookable here — the same signal the
+   badges use, so the map needs no separate vocabulary. */
+.venue-marker-open {
+  background: var(--green);
+}
+
+.venue-marker:hover {
+  transform: scale(1.12);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.34);
+}
+
+.leaflet-marker-icon:focus-visible .venue-marker {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+/* Leaflet's defaults are a sharp white box with a heavy border; soften them
+   to match the cards. */
+.leaflet-popup-content-wrapper {
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+}
+
+.leaflet-popup-content {
+  margin: 0.8rem 0.9rem;
+}
+
+.leaflet-tooltip {
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text);
+}
+
+.leaflet-container {
+  font: inherit;
+  border-radius: 10px;
+}
+
+.leaflet-control-attribution {
+  font-size: 0.68rem;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.leaflet-bar a {
+  color: var(--text);
+  border-radius: 6px;
+}
+
+/* --- Map footer: count + legend ---------------------------------------- */
+
+.map-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-top: 0.6rem;
+}
+
+.map-legend {
+  display: flex;
+  gap: 0.9rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.map-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legend-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  border: 1.5px solid var(--surface);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.legend-dot-open {
+  background: var(--green);
+}
+
+@media (max-width: 560px) {
+  /* Slightly smaller pins so a cluster of venues stays readable on a phone,
+     while still clearing the 44px touch target with their tap padding. */
+  .venue-marker {
+    width: 32px;
+    height: 32px;
+    font-size: 0.8rem;
+  }
+
+  .map-footer {
+    /* Count above legend rather than squeezed onto one line. */
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+}

@@ -447,26 +447,55 @@
     let currentView = "list";
     let map = null;
     let markerLayer = null;
+    // Which venues the current framing was chosen for, so the view is only
+    // re-fitted when that set changes.
+    let lastFitKey = null;
 
     function ensureMap() {
       if (map) return true;
       if (!window.L) return false;
 
       map = L.map(mapEl, {
-        // A page that scroll-jacks into a zoom is infuriating on the way
-        // past it; drag and the +/- control still zoom.
-        scrollWheelZoom: false,
+        scrollWheelZoom: true,
+        // Eases the wheel zoom instead of jumping a whole level per notch.
+        wheelPxPerZoomLevel: 120,
+        zoomControl: true,
       }).setView(MAP_HOME, MAP_HOME_ZOOM);
 
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 18,
-        // Required by the OpenStreetMap tile usage policy.
+      // Carto's Positron basemap rather than standard OpenStreetMap tiles:
+      // the default OSM style draws every road label and shop in full
+      // colour, which fights the markers. This one is deliberately muted,
+      // so the pins are the loudest thing on the map. Still OSM data, still
+      // free and keyless — attribution covers both, as their terms require.
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        maxZoom: 19,
+        subdomains: "abcd",
         attribution:
-          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> ' +
+          'contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
       }).addTo(map);
+
+      L.control.scale({ imperial: false }).addTo(map);
 
       markerLayer = L.layerGroup().addTo(map);
       return true;
+    }
+
+    function venueIcon(count, openCount) {
+      // A numbered circle rather than Leaflet's default teardrop pin: the
+      // count is the most useful thing about a venue at a glance, and a pin
+      // that carries it saves opening the popup to find out. Green when
+      // something is actually bookable there, matching the badges.
+      const cls = "venue-marker" + (openCount > 0 ? " venue-marker-open" : "");
+      // count is an array length, never scraped text — safe to interpolate.
+      return L.divIcon({
+        className: "",
+        html: `<div class="${cls}"><span>${count}</span></div>`,
+        iconSize: [36, 36],
+        iconAnchor: [18, 18],
+        popupAnchor: [0, -20],
+        tooltipAnchor: [0, -20],
+      });
     }
 
     function buildPopup(venue, events) {
@@ -551,17 +580,36 @@
       const points = [];
       for (const [venue, events] of byVenue) {
         const { lat, lng } = events[0];
-        const marker = L.marker([lat, lng]);
+        const openCount = events.filter((ev) => badgeInfo(ev).open).length;
+
+        const marker = L.marker([lat, lng], {
+          icon: venueIcon(events.length, openCount),
+          // Venues with something open sit above the ones without, so an
+          // open pin is never hidden under a full one.
+          zIndexOffset: openCount > 0 ? 1000 : 0,
+          title: venue,
+        });
         marker.bindPopup(() => buildPopup(venue, events), { maxWidth: 320 });
-        marker.bindTooltip(`${venue} (${events.length})`);
+        marker.bindTooltip(
+          `${venue} — ${events.length} session${events.length === 1 ? "" : "s"}` +
+            (openCount > 0 ? `, ${openCount} open` : ""),
+          { direction: "top" }
+        );
         marker.addTo(markerLayer);
         points.push([lat, lng]);
       }
 
-      if (points.length > 0) {
-        map.fitBounds(points, { padding: [40, 40], maxZoom: 14 });
-      } else {
-        map.setView(MAP_HOME, MAP_HOME_ZOOM);
+      // Only re-frame when the set of venues actually changed. Refitting on
+      // every render would throw away the zoom someone just chose the
+      // moment they ticked a filter.
+      const fitKey = Array.from(byVenue.keys()).sort().join("|");
+      if (fitKey !== lastFitKey) {
+        lastFitKey = fitKey;
+        if (points.length > 0) {
+          map.fitBounds(points, { padding: [50, 50], maxZoom: 14 });
+        } else {
+          map.setView(MAP_HOME, MAP_HOME_ZOOM);
+        }
       }
 
       const venues = byVenue.size;
