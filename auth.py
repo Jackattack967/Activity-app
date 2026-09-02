@@ -7,6 +7,7 @@ all we persist.
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 
 from authlib.integrations.flask_client import OAuth
@@ -61,7 +62,14 @@ def google_callback():
             picture_url=userinfo.get("picture", ""),
         )
         db.session.add(user)
-        db.session.commit()
+
+    # Signing in is the strongest possible sign the account is still wanted,
+    # so it both refreshes the activity clock and cancels any pending
+    # deletion warning — the user came back, which is exactly what the
+    # warning email was asking them to do.
+    user.last_seen_at = dt.datetime.utcnow()
+    user.deletion_warned_at = None
+    db.session.commit()
 
     login_user(user)
     return redirect(url_for("index"))

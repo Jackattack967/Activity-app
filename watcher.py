@@ -186,9 +186,6 @@ def send_email(to_address: str, event: dict, user_id: int) -> bool:
       </p>
     """
 
-    subject = f"Spot open: {name}"
-    sender = os.environ.get("ALERT_FROM_EMAIL", "onboarding@resend.dev")
-
     # Lets Gmail and other clients show their own unsubscribe button, and
     # honours the one-click convention (RFC 8058) by POSTing to the same URL.
     # Bulk senders without these are far more likely to be filtered as spam.
@@ -196,6 +193,28 @@ def send_email(to_address: str, event: dict, user_id: int) -> bool:
         "List-Unsubscribe": f"<{unsubscribe_url}>",
         "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     }
+
+    return _deliver_email(
+        to_address, f"Spot open: {name}", body, unsubscribe_headers
+    )
+
+
+def _deliver_email(
+    to_address: str, subject: str, body_html: str, extra_headers: dict | None = None
+) -> bool:
+    """Hand one message to whichever provider is configured.
+
+    Knows nothing about what the message says — callers own the content and
+    the decision that sending it is lawful. Kept separate so account mail
+    (which is transactional) and alert mail (which is commercial, and so
+    carries an unsubscribe link) can share one delivery path.
+    """
+    provider = email_provider()
+    if provider is None:
+        return False
+
+    sender = os.environ.get("ALERT_FROM_EMAIL", "onboarding@resend.dev")
+    headers_out = extra_headers or {}
 
     if provider == "brevo":
         url_endpoint = "https://api.brevo.com/v3/smtp/email"
@@ -208,8 +227,8 @@ def send_email(to_address: str, event: dict, user_id: int) -> bool:
             "sender": {"email": sender, "name": "Activity Schedule Dashboard"},
             "to": [{"email": to_address}],
             "subject": subject,
-            "htmlContent": f"<html><body>{body}</body></html>",
-            "headers": unsubscribe_headers,
+            "htmlContent": f"<html><body>{body_html}</body></html>",
+            "headers": headers_out,
         }
     else:
         url_endpoint = "https://api.resend.com/emails"
@@ -221,15 +240,15 @@ def send_email(to_address: str, event: dict, user_id: int) -> bool:
             "from": sender,
             "to": [to_address],
             "subject": subject,
-            "html": body,
-            "headers": unsubscribe_headers,
+            "html": body_html,
+            "headers": headers_out,
         }
 
     try:
         resp = requests.post(url_endpoint, headers=headers, json=payload, timeout=15)
         if resp.status_code >= 400:
             logger.warning(
-                "%s rejected the alert email to %s: %s %s",
+                "%s rejected the email to %s: %s %s",
                 provider,
                 to_address,
                 resp.status_code,
@@ -238,8 +257,65 @@ def send_email(to_address: str, event: dict, user_id: int) -> bool:
             return False
         return True
     except Exception:
-        logger.exception("Failed to send alert email via %s", provider)
+        logger.exception("Failed to send email via %s", provider)
         return False
+
+
+def send_deletion_warning(user, days_left: int) -> bool:
+    """Tell one user their unused account is about to be deleted.
+
+    This is a transactional message about the person's own account, not a
+    commercial one, so it goes to every affected user regardless of the
+    email_alerts opt-in and carries no unsubscribe link — CASL's rules on
+    commercial electronic messages do not reach it, and an "unsubscribe"
+    from a deletion notice would mean losing the account without being told.
+    The sender is still identified, because a warning from an anonymous
+    address reads exactly like phishing.
+    """
+    base = public_base_url()
+    if not base:
+        logger.error(
+            "Cannot warn user %s about deletion: no PUBLIC_BASE_URL or "
+            "RENDER_EXTERNAL_URL, so the email would carry no way back in.",
+            user.id,
+        )
+        return False
+    if not (user.email or "").strip():
+        logger.warning("User %s has no email address to warn", user.id)
+        return False
+
+    identity = sender_identity()
+    signature = ""
+    if identity is not None:
+        signature = (
+            '<p style="color:#6b7280;font-size:12px">'
+            f"{html.escape(identity[0])}<br>{html.escape(identity[1])}</p>"
+        )
+
+    body = f"""
+      <p>Your Activity Schedule Dashboard account has not been used in a while.</p>
+      <p>
+        To keep it, just
+        <a href="{html.escape(base)}/">open the dashboard and sign in</a>.
+        That is all it takes — signing in cancels the deletion straight away.
+      </p>
+      <p>
+        If you do nothing, the account and everything in it will be deleted in
+        <strong>{days_left} days</strong>: your saved activities, your watch
+        list, your filters, and your notification settings. This cannot be
+        undone, though you are always welcome to sign up again.
+      </p>
+      <hr style="border:none;border-top:1px solid #e2e5ea;margin:20px 0">
+      <p style="color:#6b7280;font-size:12px">
+        You are receiving this because you have an account on Activity
+        Schedule Dashboard. It is a one-off notice about that account, not a
+        newsletter, so there is nothing to unsubscribe from.
+      </p>
+      {signature}
+    """
+
+    subject = f"Your account will be deleted in {days_left} days"
+    return _deliver_email(user.email.strip(), subject, body)
 
 
 def notify_user(user, event: dict) -> int:

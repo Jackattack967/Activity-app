@@ -98,6 +98,26 @@ dashboard with none set. Each group only switches on an optional feature
 
 `.env` is gitignored and must never be committed.
 
+## Unused accounts are deleted
+
+An account that goes unused for six months is deleted, along with its watches,
+filters and notification settings. A warning email goes out 30 days before
+that, and signing in cancels it. The daily
+[`purge-inactive`](.github/workflows/purge-inactive.yml) workflow drives this.
+
+Two safeguards are deliberate:
+
+- **Nothing is deleted until `RETENTION_ENABLED` is set.** Unset, the job
+  reports which accounts it *would* warn and delete and changes nothing. Leave
+  it that way for a few weeks and read the output before arming it.
+- **An account is never deleted without a warning that actually sent.** The
+  "warned" timestamp is only written once the email provider accepts the
+  message, and deletion requires it — so if email breaks, deletions stall
+  instead of happening silently.
+
+Run `python test_retention.py` to exercise the rules against a throwaway
+sqlite database. It never touches the real one.
+
 ## License
 
 This project's own code is released under the [MIT License](LICENSE). The

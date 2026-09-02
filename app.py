@@ -22,6 +22,7 @@ from flask_login import current_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 import config
+import retention
 import scraper
 import watcher
 from auth import auth_bp, init_auth
@@ -138,6 +139,38 @@ def _is_logged_in() -> bool:
         return current_user.is_authenticated
     except Exception:
         return False
+
+
+# How stale the activity clock is allowed to get before a request refreshes
+# it. Writing on every request would add a database write to every page load
+# for no benefit — retention counts in months, so a day's resolution is far
+# more precision than it needs.
+_LAST_SEEN_REFRESH = dt.timedelta(days=1)
+
+
+@app.before_request
+def _touch_last_seen() -> None:
+    """Keep the activity clock current for signed-in users.
+
+    Sign-in alone is not enough: the session cookie outlives it, so someone
+    who stays signed in and uses the app every week would look untouched
+    since their last explicit sign-in and eventually be deleted as inactive.
+    """
+    if not _is_logged_in():
+        return
+    try:
+        user = current_user._get_current_object()
+        now = dt.datetime.utcnow()
+        if user.last_seen_at is not None and now - user.last_seen_at < _LAST_SEEN_REFRESH:
+            return
+        user.last_seen_at = now
+        # Using the app counts as coming back, exactly as signing in does.
+        user.deletion_warned_at = None
+        db.session.commit()
+    except Exception:
+        # Never let bookkeeping break the request the user actually made.
+        logger.exception("Could not update last_seen_at")
+        db.session.rollback()
 
 
 def _activity_key(source_name: str, event_name: str, location: str) -> tuple:
@@ -297,16 +330,10 @@ def api_account_delete():
     user = current_user._get_current_object()
     user_id = user.id
 
-    # Delete dependants explicitly rather than relying on cascade, so a
-    # misconfigured relationship can't silently leave someone's data behind
-    # after we've told them it was removed.
-    removed = {
-        "favorites": Favorite.query.filter_by(user_id=user_id).delete(),
-        "preferences": Preference.query.filter_by(user_id=user_id).delete(),
-        "push_subscriptions": PushSubscription.query.filter_by(user_id=user_id).delete(),
-    }
+    # Shared with the retention job, so "delete everything about this
+    # person" has exactly one implementation and cannot drift.
     logout_user()
-    db.session.delete(user)
+    removed = retention.purge_user(user)
     db.session.commit()
 
     logger.info("Deleted account %s and its data: %s", user_id, removed)
@@ -546,13 +573,13 @@ def api_push_unsubscribe():
     return jsonify({"ok": True})
 
 
-@app.route("/api/check-watches", methods=["GET", "POST"])
-def api_check_watches():
-    """Run one watch pass. Called by an external scheduler on a timer, since
-    the free Render tier sleeps and cannot poll itself."""
-    if not ACCOUNTS_ENABLED:
-        return jsonify({"error": "accounts disabled"}), 503
+def _scheduler_auth_error():
+    """Reject anything that is not the external scheduler, or None to allow.
 
+    Shared by every endpoint the scheduler calls, so they cannot drift apart
+    — one of them being accidentally left open would expose a job that
+    deletes accounts.
+    """
     # Strip whitespace on both sides: pasting env values into dashboards and
     # cron UIs very easily picks up a stray space or newline, which would
     # otherwise fail authentication for no visible reason.
@@ -561,10 +588,23 @@ def api_check_watches():
         request.args.get("token") or request.headers.get("X-Watch-Token") or ""
     ).strip()
     if not expected:
-        logger.error("WATCH_CHECK_TOKEN is not set — refusing to run watch check.")
-        return jsonify({"error": "watch checks not configured"}), 503
+        logger.error("WATCH_CHECK_TOKEN is not set — refusing to run scheduled job.")
+        return jsonify({"error": "scheduled jobs not configured"}), 503
     if not secrets.compare_digest(supplied, expected):
         return jsonify({"error": "invalid token"}), 403
+    return None
+
+
+@app.route("/api/check-watches", methods=["GET", "POST"])
+def api_check_watches():
+    """Run one watch pass. Called by an external scheduler on a timer, since
+    the free Render tier sleeps and cannot poll itself."""
+    if not ACCOUNTS_ENABLED:
+        return jsonify({"error": "accounts disabled"}), 503
+
+    denied = _scheduler_auth_error()
+    if denied is not None:
+        return denied
 
     # Force a fresh scrape: comparing against cached data would make alert
     # latency the cache TTL rather than the scheduler's interval. This also
@@ -577,6 +617,28 @@ def api_check_watches():
         db.session.rollback()
         return jsonify({"error": "watch check failed"}), 500
     return jsonify(result)
+
+
+@app.route("/api/purge-inactive", methods=["GET", "POST"])
+def api_purge_inactive():
+    """Run one retention pass. Called daily by the external scheduler.
+
+    Reports what it did (or, in dry-run mode, what it would have done) so a
+    run can be checked without reading the server log.
+    """
+    if not ACCOUNTS_ENABLED:
+        return jsonify({"error": "accounts disabled"}), 503
+
+    denied = _scheduler_auth_error()
+    if denied is not None:
+        return denied
+
+    try:
+        return jsonify(retention.run())
+    except Exception:
+        logger.exception("Retention pass failed")
+        db.session.rollback()
+        return jsonify({"error": "retention pass failed"}), 500
 
 
 @app.context_processor

@@ -1,0 +1,69 @@
+name: Delete accounts nobody uses any more
+
+# Runs the retention pass once a day: warn accounts that have gone quiet for
+# five months, delete the ones warned a month ago that never came back.
+#
+# Once a day is the right frequency. The windows are measured in months, so
+# running more often would only add load, and running less often would delay
+# deletions past the six months the privacy policy promises.
+#
+# This does nothing destructive until RETENTION_ENABLED is set in Render.
+# Until then it reports what it *would* delete, which is the point: the date
+# arithmetic gets watched against real accounts before it is trusted to
+# delete them.
+#
+# It reuses the WATCH_CHECK_URL secret rather than needing a second one —
+# same host, same token, different path.
+
+on:
+  schedule:
+    # 15:30 UTC is mid-morning in Vancouver, comfortably after the 13:00 UTC
+    # wake-up window, so the app is already awake and this doesn't have to
+    # sit through a cold start.
+    - cron: "30 15 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: purge-inactive
+  cancel-in-progress: false
+
+jobs:
+  purge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Run one retention pass
+        env:
+          WATCH_CHECK_URL: ${{ secrets.WATCH_CHECK_URL }}
+        run: |
+          if [ -z "$WATCH_CHECK_URL" ]; then
+            echo "::error::WATCH_CHECK_URL secret is not set."
+            exit 1
+          fi
+
+          PURGE_URL="${WATCH_CHECK_URL/check-watches/purge-inactive}"
+          if [ "$PURGE_URL" = "$WATCH_CHECK_URL" ]; then
+            echo "::error::WATCH_CHECK_URL does not contain 'check-watches',"
+            echo "so the purge URL could not be derived from it."
+            exit 1
+          fi
+
+          for attempt in 1 2 3; do
+            echo "Attempt $attempt..."
+            # Body to a file so the token in the URL is never echoed.
+            code=$(curl -sS -o /tmp/purge.json -w '%{http_code}' \
+                     --max-time 180 "$PURGE_URL" || echo "000")
+
+            if [ "$code" = "200" ]; then
+              echo "Retention pass completed (HTTP 200)."
+              # Returns counts and internal row ids only — no names or emails.
+              cat /tmp/purge.json
+              exit 0
+            fi
+
+            echo "Got HTTP $code; the app may still be booting."
+            sleep 30
+          done
+
+          echo "::error::Could not reach the retention endpoint after 3 attempts."
+          exit 1

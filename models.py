@@ -25,6 +25,13 @@ _ADDITIVE_MIGRATIONS = (
     "ALTER TABLE favorites ADD COLUMN IF NOT EXISTS "
     "session_date VARCHAR(10) NOT NULL DEFAULT ''",
     "ALTER TABLE favorites DROP CONSTRAINT IF EXISTS uq_favorite_user_activity",
+    # Retention needs to know when an account was last used. Existing rows
+    # have no history, so they are seeded from created_at — the earliest
+    # defensible guess, and one that can only delay a deletion, never
+    # trigger one early.
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP",
+    "UPDATE users SET last_seen_at = created_at WHERE last_seen_at IS NULL",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_warned_at TIMESTAMP",
     """
     DO $$ BEGIN
       IF NOT EXISTS (
@@ -56,6 +63,17 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
     # Opt-in: alerts go out by push unless the user also asks for email.
     email_alerts = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Last time this account was actually used, refreshed on sign-in and on
+    # authenticated requests. This is the only signal retention has: without
+    # it "inactive" could only mean "signed up long ago", which would delete
+    # people who use the app every week.
+    last_seen_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+    # When the "your account is about to be deleted" email went out. NULL
+    # means no warning has been sent, and retention refuses to delete an
+    # account that has not been warned — so a mail outage stalls deletion
+    # instead of silently destroying accounts nobody was told about.
+    deletion_warned_at = db.Column(db.DateTime)
 
     preference = db.relationship(
         "Preference", backref="user", uselist=False, cascade="all, delete-orphan"
