@@ -75,3 +75,7 @@ services:
       # Set to "true" once the dry-run output has been checked for a while.
       - key: RETENTION_ENABLED
         sync: false
+      # Leave blank to keep the in-app watch loop on (the default). Set to
+      # "false" only to fall back to the external scheduler alone.
+      - key: AUTOWATCH_ENABLED
+        sync: false

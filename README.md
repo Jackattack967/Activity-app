@@ -98,6 +98,34 @@ dashboard with none set. Each group only switches on an optional feature
 
 `.env` is gitignored and must never be committed.
 
+## How alerting stays alive
+
+Watch passes run from two places, deliberately:
+
+1. **Inside the app** ([`autowatch.py`](autowatch.py)) — a background thread
+   runs a pass every 5 minutes while the app is awake.
+2. **An external scheduler** calling `/api/check-watches`.
+
+The thread defers to the scheduler: if a pass ran in the last 4 minutes, by
+anyone, it sits that turn out. So they never double up, and if the external
+scheduler stops, the thread takes over within one interval.
+
+This exists because the external-scheduler-only setup failed twice, the second
+time silently. Render's free tier sleeps after ~15 minutes idle and takes ~31
+seconds to wake; cron-job.org's timeout is a hard 30 seconds and it disables a
+job after 25 consecutive failures. Every ping arriving while the app was asleep
+failed, and about two hours of that switched the job off.
+
+**The thread cannot keep the app awake** — Render spins down on inbound request
+inactivity, and a busy thread doesn't count. So something external still has to
+ping it. The point is that the pinger's job is now much easier: it only has to
+keep the app awake, not drive every check on a strict timer. Point it at
+`/api/watch-status`, which is public, needs no token, and answers in
+milliseconds, rather than at `/api/check-watches`, which does a full scrape.
+
+`/api/watch-status` reports `autowatch: true|false` so you can tell from
+outside whether the loop is actually running.
+
 ## Unused accounts are deleted
 
 An account that goes unused for six months is deleted, along with its watches,

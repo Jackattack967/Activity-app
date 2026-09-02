@@ -21,6 +21,7 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_login import current_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
+import autowatch
 import config
 import retention
 import scraper
@@ -342,7 +343,7 @@ def api_account_delete():
 
 @app.route("/api/watch-status")
 def api_watch_status():
-    """Is the external scheduler actually calling /api/check-watches?
+    """Is anything actually running watch passes?
 
     Public and read-only: it exposes only whether the watcher ran and its
     aggregate counts, never anything about who is watching what.
@@ -362,6 +363,11 @@ def api_watch_status():
         # their values.
         "email_ready": watcher.email_provider() is not None and email_gap is None,
         "email_blocked_reason": email_gap,
+        # Whether the in-app watch loop is running in this process. If this
+        # is false, alerting depends entirely on the external scheduler
+        # again — which is the situation that failed twice unnoticed.
+        "autowatch": autowatch.started(),
+        "autowatch_interval": autowatch.INTERVAL,
     }
 
     if not ACCOUNTS_ENABLED:
@@ -573,6 +579,17 @@ def api_push_unsubscribe():
     return jsonify({"ok": True})
 
 
+def _run_watch_pass() -> dict:
+    """One watch pass: scrape everything fresh, then alert on any openings.
+
+    Force a fresh scrape: comparing against cached data would make alert
+    latency the cache TTL rather than the check interval. This also
+    refreshes the shared cache, so page loads stay fast *and* current.
+    """
+    data = _get_events(force=True)
+    return watcher.check_watches(data["events"])
+
+
 def _scheduler_auth_error():
     """Reject anything that is not the external scheduler, or None to allow.
 
@@ -606,12 +623,10 @@ def api_check_watches():
     if denied is not None:
         return denied
 
-    # Force a fresh scrape: comparing against cached data would make alert
-    # latency the cache TTL rather than the scheduler's interval. This also
-    # refreshes the shared cache, so page loads stay fast *and* current.
-    data = _get_events(force=True)
     try:
-        result = watcher.check_watches(data["events"])
+        # Serialised against the in-process watch loop, so the two can never
+        # run a pass at the same time and both alert on the same opening.
+        result = autowatch.run_pass(_run_watch_pass)
     except Exception:
         logger.exception("Watch check failed")
         db.session.rollback()
@@ -657,6 +672,13 @@ def inject_user():
         # alert emails, and which one that is depends on which API key is set.
         "email_provider_name": EMAIL_PROVIDER_NAMES.get(watcher.email_provider()),
     }
+
+
+# Started last, so everything it needs (database, cache, routes) exists by
+# the time the first pass runs. Only when accounts are on: with no database
+# there are no watches to check.
+if ACCOUNTS_ENABLED:
+    autowatch.start(app, _run_watch_pass)
 
 
 if __name__ == "__main__":
