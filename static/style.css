@@ -832,3 +832,139 @@ footer a { color: var(--text-muted); }
   color: var(--text);
 }
 .btn-secondary:hover { background: var(--border); }
+
+/* --- Map view ------------------------------------------------------------
+   The map is an alternative view of the same filtered data, so it lives
+   inside the same <main> and inherits the same gutters as the list. */
+
+.view-toggle {
+  display: inline-flex;
+  align-self: flex-start;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.view-btn {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0.4rem 1rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.view-btn.active {
+  background: var(--brand);
+  color: white;
+}
+
+#map-view {
+  padding: 0 1.5rem 1.5rem;
+}
+
+#facility-map {
+  height: 60vh;
+  /* Keeps the map from becoming a letterbox slot on a short laptop screen
+     and from swallowing a tall phone whole. */
+  min-height: 320px;
+  max-height: 640px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--gray-bg);
+}
+
+.map-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* Leaflet renders popups into its own container, so these are styled by
+   class rather than descending from #map-view. */
+.map-popup h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.95rem;
+}
+
+.map-popup-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  /* A busy venue can have dozens of sessions; scroll inside the popup
+     rather than letting it grow past the top of the map. */
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.map-popup-list li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.5rem;
+  align-items: center;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.map-popup-list li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.map-popup-name {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.map-popup-when {
+  grid-column: 1;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* The badge sits beside both lines rather than under the name. */
+.map-popup-list .badge {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.map-popup-more {
+  margin: 0.5rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+@media (max-width: 560px) {
+  /* Same gutter trade as the rest of the phone layout: --edge is defined in
+     the main mobile block above, and this rule comes later so it wins. */
+  #map-view {
+    padding: 0 var(--edge) 1rem;
+  }
+
+  #facility-map {
+    /* Taller share of a phone screen than on desktop — there is no list
+       beside it competing for the space, and a short map is hard to pan. */
+    height: 65vh;
+    min-height: 300px;
+    border-radius: 8px;
+  }
+
+  .view-toggle {
+    /* Full width so both targets clear the 44px thumb minimum the rest of
+       the phone layout uses. */
+    align-self: stretch;
+  }
+
+  .view-btn {
+    flex: 1;
+    padding: 0.55rem 1rem;
+  }
+
+  .map-popup-list {
+    max-height: 200px;
+  }
+}

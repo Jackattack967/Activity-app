@@ -142,3 +142,41 @@ SCHEDULE_WINDOW_DAYS = 14
 
 # How long fetched results are cached in memory before re-scraping (seconds).
 CACHE_TTL_SECONDS = 15 * 60
+
+# Where each venue physically is, for the map view.
+#
+# Keyed on an event's `location`, not its `facility`. `facility` is the room
+# inside the building ("Pinetree Gymnasium 1", "Pinetree Room 5/6" — nine of
+# them at Pinetree alone); `location` is the building itself, which is what
+# has an address and a place on a map. It is also what the app already treats
+# as venue identity when matching favourites.
+#
+# Hardcoded on purpose. There are twelve of these and the list changes about
+# never, so geocoding at runtime would mean a network call and an API
+# dependency on every scrape to learn something that is already known.
+# Coordinates came from OpenStreetMap/Nominatim, checked against the cities'
+# own facility pages. Regenerate by hand if a venue is ever added.
+#
+# A location missing from here simply gets no marker — see _with_coords() in
+# app.py. Nothing breaks; the venue just doesn't appear on the map.
+FACILITY_COORDS = {
+    # City of Coquitlam
+    "Centennial Activity Centre": (49.252663, -122.847580),
+    # OSM has no entry by name; this is 1655 Winslow Ave, in Blue Mountain Park.
+    "Dogwood Pavilion": (49.254886, -122.848746),
+    "Glen Pine Pavilion": (49.283203, -122.794938),
+    "Maillardville Community Centre": (49.240876, -122.859060),
+    "Pinetree Community Centre": (49.289383, -122.791355),
+    # Separate building from the Sport & Leisure Complex, ~150m down the street.
+    "Poirier Forum": (49.254214, -122.847228),
+    "Poirier Sport & Leisure Complex": (49.254579, -122.845262),
+    # Runs inside Smiling Creek Elementary, 3456 Princeton Ave.
+    "Smiling Creek Activity Centre": (49.297896, -122.750289),
+    # On the west side of Summit Middle School, 1450 Parkway Blvd; this is the
+    # school's own point, so the marker sits a little east of the entrance.
+    "Summit Community Centre": (49.295495, -122.806609),
+    # City of Port Moody
+    "Port Moody Recreation Complex": (49.283211, -122.831651),
+    "Rocky Point Pool": (49.279625, -122.849257),
+    "Westhill Pool": (49.284250, -122.879587),
+}

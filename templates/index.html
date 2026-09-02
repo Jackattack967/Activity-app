@@ -4,6 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Activity Schedule Dashboard</title>
+<!-- Leaflet, for the map view. Pinned to an exact version with Subresource
+     Integrity, so a compromised or changed CDN file is refused rather than
+     executed. OpenStreetMap tiles need no API key and cost nothing. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="" defer></script>
+
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
 <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
@@ -110,6 +118,12 @@
     </label>
     {% endif %}
   </div>
+
+  <!-- Two views of the same filtered data, not two pages. -->
+  <div class="view-toggle" id="view-toggle" role="group" aria-label="View">
+    <button type="button" class="view-btn active" data-view="list" aria-pressed="true">List</button>
+    <button type="button" class="view-btn" data-view="map" aria-pressed="false">Map</button>
+  </div>
 </div>
 
 {% if accounts_enabled %}
@@ -128,6 +142,11 @@
     <button id="clear-filters-btn" type="button" class="btn-secondary">Clear all filters</button>
   </div>
   <div id="day-groups"></div>
+
+  <div id="map-view" hidden>
+    <div id="facility-map"></div>
+    <p class="map-note" id="map-note"></p>
+  </div>
 </main>
 
 <div class="modal-overlay" id="preferences-modal" hidden>

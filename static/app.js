@@ -420,11 +420,195 @@
 
       card.appendChild(statusCol);
 
-      card._open = badge.open;
       return card;
     }
 
-    function render() {
+    // --- Map view ---------------------------------------------------------
+    //
+    // One marker per venue, not per session: eleven "Stick, Ring & Puck"
+    // sessions at Poirier are one building, and eleven stacked pins would
+    // say nothing a single pin doesn't.
+    //
+    // Leaflet is loaded with `defer`, so it is not available while this file
+    // first runs. The map is therefore built on the first switch to it,
+    // which also means people who never open the map never pay for it.
+
+    const viewToggleEl = document.getElementById("view-toggle");
+    const mapViewEl = document.getElementById("map-view");
+    const mapEl = document.getElementById("facility-map");
+    const mapNoteEl = document.getElementById("map-note");
+
+    // Roughly centres the Tri-Cities, used only until markers exist to fit.
+    const MAP_HOME = [49.2695, -122.8175];
+    const MAP_HOME_ZOOM = 12;
+    // Long popups are unusable on a phone; the rest stay in the list view.
+    const MAX_POPUP_SESSIONS = 8;
+
+    let currentView = "list";
+    let map = null;
+    let markerLayer = null;
+
+    function ensureMap() {
+      if (map) return true;
+      if (!window.L) return false;
+
+      map = L.map(mapEl, {
+        // A page that scroll-jacks into a zoom is infuriating on the way
+        // past it; drag and the +/- control still zoom.
+        scrollWheelZoom: false,
+      }).setView(MAP_HOME, MAP_HOME_ZOOM);
+
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+        // Required by the OpenStreetMap tile usage policy.
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      }).addTo(map);
+
+      markerLayer = L.layerGroup().addTo(map);
+      return true;
+    }
+
+    function buildPopup(venue, events) {
+      // Built as DOM rather than an HTML string: these values come from a
+      // scraped third-party page, and innerHTML would make a portal's
+      // session name executable in the browser.
+      const wrap = document.createElement("div");
+      wrap.className = "map-popup";
+
+      const title = document.createElement("h3");
+      title.textContent = venue;
+      wrap.appendChild(title);
+
+      const sorted = events
+        .slice()
+        .sort((a, b) =>
+          `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`)
+        );
+      const shown = sorted.slice(0, MAX_POPUP_SESSIONS);
+
+      const list = document.createElement("ul");
+      list.className = "map-popup-list";
+      for (const ev of shown) {
+        const item = document.createElement("li");
+
+        const name = document.createElement("span");
+        name.className = "map-popup-name";
+        name.textContent = ev.event_name;
+
+        const when = document.createElement("span");
+        when.className = "map-popup-when";
+        when.textContent = [
+          formatDateHeading(ev.date, ev.day_of_week),
+          ev.start_time,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+
+        const badge = badgeInfo(ev);
+        const badgeEl = document.createElement("span");
+        badgeEl.className = "badge " + badge.cls;
+        badgeEl.textContent = badge.text;
+
+        item.append(name, when, badgeEl);
+        list.appendChild(item);
+      }
+      wrap.appendChild(list);
+
+      if (sorted.length > shown.length) {
+        const more = document.createElement("p");
+        more.className = "map-popup-more";
+        const n = sorted.length - shown.length;
+        more.textContent = `+${n} more session${n === 1 ? "" : "s"} — see the list view`;
+        wrap.appendChild(more);
+      }
+      return wrap;
+    }
+
+    function renderMap(visible) {
+      // Nothing to do while the map is hidden; switching to it re-renders.
+      if (currentView !== "map") return;
+      if (!ensureMap()) {
+        mapNoteEl.textContent =
+          "The map library could not be loaded. The list view still works.";
+        return;
+      }
+
+      markerLayer.clearLayers();
+
+      const byVenue = new Map();
+      let unplaced = 0;
+      for (const ev of visible) {
+        if (typeof ev.lat !== "number" || typeof ev.lng !== "number") {
+          unplaced += 1;
+          continue;
+        }
+        const key = ev.location || "";
+        if (!byVenue.has(key)) byVenue.set(key, []);
+        byVenue.get(key).push(ev);
+      }
+
+      const points = [];
+      for (const [venue, events] of byVenue) {
+        const { lat, lng } = events[0];
+        const marker = L.marker([lat, lng]);
+        marker.bindPopup(() => buildPopup(venue, events), { maxWidth: 320 });
+        marker.bindTooltip(`${venue} (${events.length})`);
+        marker.addTo(markerLayer);
+        points.push([lat, lng]);
+      }
+
+      if (points.length > 0) {
+        map.fitBounds(points, { padding: [40, 40], maxZoom: 14 });
+      } else {
+        map.setView(MAP_HOME, MAP_HOME_ZOOM);
+      }
+
+      const venues = byVenue.size;
+      const sessions = visible.length - unplaced;
+      mapNoteEl.textContent =
+        venues === 0
+          ? "No locations match your filters."
+          : `${sessions} session${sessions === 1 ? "" : "s"} at ${venues} location${
+              venues === 1 ? "" : "s"
+            }.` + (unplaced > 0 ? ` ${unplaced} at venues with no map position.` : "");
+    }
+
+    function setView(view) {
+      currentView = view;
+      const showMap = view === "map";
+
+      mapViewEl.hidden = !showMap;
+      dayGroupsEl.hidden = showMap;
+
+      viewToggleEl.querySelectorAll(".view-btn").forEach((btn) => {
+        const active = btn.dataset.view === view;
+        btn.classList.toggle("active", active);
+        btn.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+
+      if (showMap) {
+        // Order matters. Leaflet caches its container's size, and anything
+        // measured while the container was hidden is wrong — grey tiles, and
+        // a fitBounds that frames the wrong area. So re-measure first, then
+        // draw. The container is already unhidden by this point.
+        if (ensureMap()) map.invalidateSize();
+        renderMap(visibleEvents());
+      }
+    }
+
+    if (viewToggleEl) {
+      viewToggleEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-view]");
+        if (!btn) return;
+        setView(btn.dataset.view);
+      });
+    }
+
+    // The events currently passing every filter. Split out of render() so
+    // the list and the map are guaranteed to be showing the same set —
+    // "the map is another view of this data", not a second query.
+    function visibleEvents() {
       const keyword = keywordFilterEl.value.trim().toLowerCase();
       const location = locationFilterEl.value;
       const openOnly = openOnlyFilterEl.checked;
@@ -433,18 +617,24 @@
 
       const upcoming = allEvents.filter((ev) => !alreadyFinished(ev));
 
-      const filtered = upcoming.filter((ev) => {
+      return upcoming.filter((ev) => {
         if (activeActivity !== "all" && ev.activity_type !== activeActivity) return false;
         if (location && ev.location !== location) return false;
         if (keyword && !ev.event_name.toLowerCase().includes(keyword)) return false;
         if (favoritesOnly && !ev.is_favorited) return false;
+        // Open-only used to be applied after the cards were built, via
+        // card._open. Doing it here instead gives the same answer —
+        // badgeInfo() is what set that flag — and lets the map reuse it.
+        if (openOnly && !badgeInfo(ev).open) return false;
         return true;
       });
+    }
 
+    function renderList(visible) {
       dayGroupsEl.innerHTML = "";
 
       const groups = new Map();
-      for (const ev of filtered) {
+      for (const ev of visible) {
         const key = ev.date || "";
         if (!groups.has(key)) groups.set(key, []);
         groups.get(key).push(ev);
@@ -452,13 +642,9 @@
 
       const sortedKeys = Array.from(groups.keys()).sort();
 
-      let renderedAny = false;
       for (const key of sortedKeys) {
         const events = groups.get(key);
-        const cards = events.map(buildCard).filter((card) => !openOnly || card._open);
-        if (cards.length === 0) continue;
 
-        renderedAny = true;
         const section = document.createElement("section");
         section.className = "day-group";
 
@@ -468,12 +654,26 @@
 
         const list = document.createElement("div");
         list.className = "event-list";
-        cards.forEach((c) => list.appendChild(c));
+        events.map(buildCard).forEach((c) => list.appendChild(c));
         section.appendChild(list);
 
         dayGroupsEl.appendChild(section);
       }
+    }
 
+    function render() {
+      const keyword = keywordFilterEl.value.trim().toLowerCase();
+      const location = locationFilterEl.value;
+      const openOnly = openOnlyFilterEl.checked;
+      const favoritesOnly = favoritesOnlyFilterEl ? favoritesOnlyFilterEl.checked : false;
+
+      const upcoming = allEvents.filter((ev) => !alreadyFinished(ev));
+      const visible = visibleEvents();
+
+      renderList(visible);
+      renderMap(visible);
+
+      const renderedAny = visible.length > 0;
       emptyStateEl.hidden = renderedAny;
       if (!renderedAny) {
         const anyFilterActive =

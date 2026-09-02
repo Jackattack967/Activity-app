@@ -101,6 +101,20 @@ _cache_lock = threading.Lock()
 _cache: dict = {"events": [], "errors": [], "fetched_at": 0.0}
 
 
+def _with_coords(event: dict) -> dict:
+    """Add lat/lng for the event's venue, if we know where it is.
+
+    Done here, once per scrape, rather than per request: the coordinates are
+    static, so recomputing them on every page load would be pure waste.
+
+    A venue missing from the table gets lat/lng of None rather than raising.
+    The map then simply has no marker for it, which is the right failure: a
+    new venue appearing in a portal should cost us a pin, not the dashboard.
+    """
+    lat, lng = config.FACILITY_COORDS.get(event.get("location") or "", (None, None))
+    return {**event, "lat": lat, "lng": lng}
+
+
 def _get_events(force: bool = False) -> dict:
     with _cache_lock:
         is_stale = (time.time() - _cache["fetched_at"]) > config.CACHE_TTL_SECONDS
@@ -108,7 +122,7 @@ def _get_events(force: bool = False) -> dict:
             events, errors = scraper.fetch_all_events(
                 config.SOURCES, config.SCHEDULE_WINDOW_DAYS
             )
-            fresh = [dataclasses.asdict(e) for e in events]
+            fresh = [_with_coords(dataclasses.asdict(e)) for e in events]
             if not fresh and errors and _cache["events"]:
                 # Every source failed. That means the portals were
                 # unreachable, not that every session was cancelled — so
