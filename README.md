@@ -177,6 +177,31 @@ waits on it for more than seven seconds, and every failure just leaves "All
 areas" selected. The coordinates are compared against the venues already on
 the page and then discarded; they are never sent anywhere.
 
+## Feedback
+
+The Feedback button in the header emails what someone writes to
+`FEEDBACK_EMAIL`, or to `CONTACT_EMAIL` if that isn't set. If neither is set,
+or no email provider is configured, the button isn't rendered at all — a
+button that silently discards what someone took the trouble to write is worse
+than no button.
+
+Nothing is stored. The message goes to an inbox and nowhere else, which keeps
+a free-text field written by the public out of the database entirely.
+
+Two things about it are deliberate:
+
+- **Everything is HTML-escaped.** The body is HTML sent from this app's own
+  address, so unescaped input would let a stranger compose the markup of a
+  mail that appears to come from you — a phishing kit, not a bug.
+- **It is rate limited on two axes**, because it is an unauthenticated
+  endpoint that causes email to be sent: three per sender per hour so one
+  person can't flood the inbox, and forty in total per hour so a script can't
+  burn the provider's daily allowance and take the spot-open alerts down with
+  it. The counters are in memory, which is enough at one gunicorn worker.
+
+Run `python test_feedback.py` to exercise the limits and the escaping. It
+swaps the delivery function for one that records, so it never sends.
+
 ## Unused accounts are deleted
 
 An account that goes unused for six months is deleted, along with its watches,
@@ -204,6 +229,7 @@ exits non-zero on failure.
 
 ```bash
 python test_scrapers.py     # platform routing, and parsing captured API rows
+python test_feedback.py     # feedback rate limits and HTML escaping
 python test_retention.py    # the deletion rules, against throwaway sqlite
 python test_autowatch.py    # the in-app watch loop, with shortened intervals
 ```

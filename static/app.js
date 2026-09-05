@@ -1496,6 +1496,99 @@
       }
     });
 
+    function setUpFeedback() {
+      const modal = document.getElementById("feedback-modal");
+      const openBtn = document.getElementById("feedback-btn");
+      if (!modal || !openBtn) return; // not configured on this deployment
+
+      const kindEl = document.getElementById("feedback-kind");
+      const messageEl = document.getElementById("feedback-message");
+      const replyEl = document.getElementById("feedback-reply");
+      const statusEl = document.getElementById("feedback-status");
+      const sendBtn = document.getElementById("feedback-send-btn");
+      let kind = "Problem";
+
+      function setStatus(text, ok) {
+        statusEl.textContent = text;
+        statusEl.classList.toggle("feedback-status-bad", text && !ok);
+        statusEl.classList.toggle("feedback-status-good", !!(text && ok));
+      }
+
+      function close() {
+        modal.hidden = true;
+      }
+
+      function open() {
+        setStatus("", true);
+        modal.hidden = false;
+        messageEl.focus();
+      }
+
+      openBtn.addEventListener("click", open);
+      document.getElementById("feedback-close-btn").addEventListener("click", close);
+      document.getElementById("feedback-cancel-btn").addEventListener("click", close);
+      modal.addEventListener("click", (e) => {
+        if (e.target === modal) close();
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !modal.hidden) close();
+      });
+
+      kindEl.addEventListener("click", (e) => {
+        const btn = e.target.closest("button[data-kind]");
+        if (!btn) return;
+        kind = btn.dataset.kind;
+        kindEl.querySelectorAll(".view-btn").forEach((b) => {
+          const active = b === btn;
+          b.classList.toggle("active", active);
+          b.setAttribute("aria-pressed", active ? "true" : "false");
+        });
+      });
+
+      sendBtn.addEventListener("click", async () => {
+        const message = messageEl.value.trim();
+        if (!message) {
+          setStatus("Please write something first.", false);
+          messageEl.focus();
+          return;
+        }
+
+        sendBtn.disabled = true;
+        sendBtn.textContent = "Sending…";
+        setStatus("", true);
+        try {
+          const resp = await fetch("/api/feedback", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message,
+              kind,
+              replyTo: replyEl ? replyEl.value.trim() : "",
+            }),
+          });
+          const data = await resp.json().catch(() => ({}));
+          if (resp.ok) {
+            // Clear it only once it has actually gone, so a failed send
+            // never throws away what someone wrote.
+            messageEl.value = "";
+            setStatus("Thanks — that's been sent.", true);
+            setTimeout(() => {
+              if (!modal.hidden) close();
+            }, 1600);
+          } else {
+            setStatus(data.error || "Couldn't send that. Please try again.", false);
+          }
+        } catch (err) {
+          console.error("Feedback failed to send:", err);
+          setStatus("Couldn't reach the server. Please try again.", false);
+        } finally {
+          sendBtn.disabled = false;
+          sendBtn.textContent = "Send";
+        }
+      });
+    }
+
+    setUpFeedback();
     setUpAlertsButton();
     showWatchStatus();
 

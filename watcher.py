@@ -318,6 +318,53 @@ def send_deletion_warning(user, days_left: int) -> bool:
     return _deliver_email(user.email.strip(), subject, body)
 
 
+def send_feedback(message: str, kind: str, reply_to: str = "", context: str = "") -> bool:
+    """Email one piece of user feedback to whoever runs this dashboard.
+
+    Goes to FEEDBACK_EMAIL, or to CONTACT_EMAIL if that isn't set, so a
+    deployment that already has a contact address gets this for free.
+    Nothing is stored: the message lives in the operator's inbox and
+    nowhere else, which keeps a free-text field written by the public out
+    of the database entirely.
+
+    Every value here was typed by a stranger, so all of it is escaped. An
+    unescaped angle bracket would let someone write the HTML of an email
+    sent from this app's own address, which is a phishing kit, not a bug.
+    """
+    to_address = (
+        os.environ.get("FEEDBACK_EMAIL", "").strip()
+        or os.environ.get("CONTACT_EMAIL", "").strip()
+    )
+    if not to_address:
+        logger.warning("Feedback submitted but no FEEDBACK_EMAIL/CONTACT_EMAIL is set")
+        return False
+
+    reply_line = ""
+    if reply_to:
+        reply_line = (
+            f'<p>Reply to: <strong>{html.escape(reply_to)}</strong></p>'
+        )
+
+    body = f"""
+      <p><strong>{html.escape(kind)}</strong> from the dashboard.</p>
+      <blockquote style="margin:0;padding:12px 16px;border-left:3px solid #2563eb;
+                         background:#f6f8fb;white-space:pre-wrap">{html.escape(message)}</blockquote>
+      {reply_line}
+      <hr style="border:none;border-top:1px solid #e2e5ea;margin:20px 0">
+      <p style="color:#6b7280;font-size:12px">{html.escape(context)}</p>
+    """
+
+    headers = {}
+    if reply_to:
+        # Lets a reply go straight back to whoever wrote in, without the
+        # address having to be copied out of the body by hand.
+        headers["Reply-To"] = reply_to
+
+    return _deliver_email(
+        to_address, f"[Feedback] {kind}", body, headers or None
+    )
+
+
 def notify_user(user, event: dict) -> int:
     """Push an 'a spot opened' alert to every device a user has registered."""
     payload = {

@@ -807,6 +807,64 @@ footer a { color: var(--text-muted); }
   margin-bottom: 1.25rem;
 }
 
+.feedback-field {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.9rem;
+}
+
+.feedback-field > span {
+  display: block;
+  margin-bottom: 0.35rem;
+}
+
+.feedback-field em {
+  color: var(--text-muted);
+  font-style: normal;
+  font-size: 0.82rem;
+}
+
+.feedback-field textarea,
+.feedback-field input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.55rem 0.65rem;
+}
+
+.feedback-field textarea {
+  resize: vertical;
+  min-height: 5.5rem;
+}
+
+.feedback-field textarea:focus-visible,
+.feedback-field input:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+}
+
+/* Reserves its line whether or not there is a message, so the buttons
+   underneath don't jump when one appears. */
+.feedback-status {
+  min-height: 1.2rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.feedback-status-good {
+  color: var(--green);
+}
+
+.feedback-status-bad {
+  color: var(--red);
+}
+
 /* How many sessions an option covers. Pushed to the right so the option
    names stay a clean column to read down. */
 .pref-count {

@@ -518,6 +518,88 @@ def api_preferences():
     )
 
 
+# Feedback is open to anyone, signed in or not — the people most likely to
+# hit a bug are the ones who never made an account. That makes it an
+# unauthenticated endpoint that causes an email to be sent, so it is rate
+# limited on two axes: per sender, so one person cannot flood the inbox, and
+# in total, so a script cannot burn the day's allowance from the email
+# provider and take the spot-open alerts down with it.
+#
+# In-memory is sufficient because the app runs a single gunicorn worker; a
+# restart forgets the counters, which costs at most a few extra messages.
+_FEEDBACK_WINDOW = dt.timedelta(hours=1)
+_FEEDBACK_MAX_PER_SENDER = 3
+_FEEDBACK_MAX_TOTAL = 40
+_FEEDBACK_MAX_LENGTH = 2000
+_FEEDBACK_KINDS = {"Problem", "Idea"}
+
+_feedback_lock = threading.Lock()
+_feedback_log: list[tuple[dt.datetime, str]] = []
+
+
+def _feedback_allowed(sender: str) -> bool:
+    now = dt.datetime.utcnow()
+    with _feedback_lock:
+        cutoff = now - _FEEDBACK_WINDOW
+        _feedback_log[:] = [entry for entry in _feedback_log if entry[0] > cutoff]
+        if len(_feedback_log) >= _FEEDBACK_MAX_TOTAL:
+            return False
+        if sum(1 for _, who in _feedback_log if who == sender) >= _FEEDBACK_MAX_PER_SENDER:
+            return False
+        _feedback_log.append((now, sender))
+        return True
+
+
+@app.route("/api/feedback", methods=["POST"])
+def api_feedback():
+    body = request.get_json(force=True, silent=True) or {}
+
+    message = (body.get("message") or "").strip()
+    if not message:
+        return jsonify({"error": "Please write a message first."}), 400
+    if len(message) > _FEEDBACK_MAX_LENGTH:
+        return jsonify({"error": "That message is too long."}), 400
+
+    # Anything not on the list becomes the neutral label rather than being
+    # echoed into an email subject line we didn't choose.
+    kind = body.get("kind") if body.get("kind") in _FEEDBACK_KINDS else "Feedback"
+
+    reply_to = (body.get("replyTo") or "").strip()
+    if reply_to and (len(reply_to) > 254 or "@" not in reply_to or " " in reply_to):
+        return jsonify({"error": "That email address doesn't look right."}), 400
+    # A signed-in user who left it blank is already identifiable to us, and
+    # being able to reply is the whole point of collecting it at all.
+    if not reply_to and _is_logged_in():
+        reply_to = (current_user.email or "").strip()
+
+    sender = request.remote_addr or "unknown"
+    if not _feedback_allowed(sender):
+        return (
+            jsonify({"error": "Thanks — you've sent a few already. Try again later."}),
+            429,
+        )
+
+    context = (
+        f"Sent {dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC · "
+        f"{'signed in' if _is_logged_in() else 'not signed in'}"
+    )
+    if watcher.send_feedback(message, kind, reply_to, context):
+        return jsonify({"ok": True})
+
+    # Never pretend it arrived. Someone who thinks they've reported a bug
+    # and hasn't is worse off than someone told to email instead.
+    logger.error("Feedback could not be delivered (email provider unavailable)")
+    return (
+        jsonify(
+            {
+                "error": "Couldn't send that just now."
+                + (f" You can email {CONTACT_EMAIL} instead." if CONTACT_EMAIL else "")
+            }
+        ),
+        503,
+    )
+
+
 @app.route("/api/favorites", methods=["GET", "POST"])
 def api_favorites():
     if not _is_logged_in():
@@ -733,6 +815,10 @@ def inject_user():
         "vapid_public_key": os.environ.get("VAPID_PUBLIC_KEY", ""),
         "push_enabled": bool(os.environ.get("VAPID_PUBLIC_KEY")) and ACCOUNTS_ENABLED,
         "email_alerts_available": watcher.email_provider() is not None,
+        # Feedback needs both a way to send mail and somewhere to send it.
+        # Without both the button is hidden rather than shown and broken.
+        "feedback_enabled": watcher.email_provider() is not None
+        and bool(os.environ.get("FEEDBACK_EMAIL", "").strip() or CONTACT_EMAIL),
         "contact_email": CONTACT_EMAIL,
         # The privacy policy has to name the processor that actually handles
         # alert emails, and which one that is depends on which API key is set.

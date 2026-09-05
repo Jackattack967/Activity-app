@@ -32,6 +32,14 @@
   <div class="topbar-meta">
     <button id="refresh-btn" type="button">Refresh</button>
 
+    {% if feedback_enabled %}
+    {# Only rendered when there is somewhere for it to go — a button that
+       silently drops what someone took the trouble to write is worse than
+       no button. #}
+    <button id="feedback-btn" type="button"
+            title="Report a problem or suggest an idea">Feedback</button>
+    {% endif %}
+
     {% if accounts_enabled and not logged_in %}
     <a class="google-signin-btn" href="{{ url_for('auth.login_google') }}">Sign in with Google</a>
     {% endif %}
@@ -221,6 +229,43 @@
     {% endif %}
   </div>
 </div>
+
+{% if feedback_enabled %}
+<div class="modal-overlay" id="feedback-modal" hidden>
+  <div class="modal-card" role="dialog" aria-labelledby="feedback-title">
+    <div class="modal-header">
+      <h2 id="feedback-title">Send feedback</h2>
+      <button id="feedback-close-btn" type="button" class="modal-close" aria-label="Close">✕</button>
+    </div>
+    <p class="modal-sub">Found something broken, or thought of something this should do? It goes straight to whoever runs the site.</p>
+
+    <div class="view-toggle" id="feedback-kind" role="group" aria-label="Kind of feedback">
+      <button type="button" class="view-btn active" data-kind="Problem" aria-pressed="true">Problem</button>
+      <button type="button" class="view-btn" data-kind="Idea" aria-pressed="false">Idea</button>
+    </div>
+
+    <label class="feedback-field">
+      <span>What happened, or what would you like?</span>
+      <textarea id="feedback-message" rows="5" maxlength="2000"
+                placeholder="The map doesn't load on my phone…"></textarea>
+    </label>
+
+    {% if not logged_in %}
+    <label class="feedback-field">
+      <span>Your email <em>(optional — only so a reply can reach you)</em></span>
+      <input id="feedback-reply" type="email" autocomplete="email" placeholder="you@example.com">
+    </label>
+    {% endif %}
+
+    <p class="feedback-status" id="feedback-status" role="status"></p>
+
+    <div class="modal-actions">
+      <button id="feedback-cancel-btn" type="button" class="btn-secondary">Cancel</button>
+      <button id="feedback-send-btn" type="button" class="btn-primary">Send</button>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <footer>
   <p>Sources: {{ source_names|join(', ') }} (each city's public booking portal) &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>
