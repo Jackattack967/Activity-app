@@ -48,7 +48,8 @@
     // you'd never see if the menu closed out from under it.
     menuPanel.addEventListener("click", (e) => {
       const item = e.target.closest(".menu-item");
-      if (item && item.id !== "alerts-btn") closeMenu();
+      const reportsInPlace = item && (item.id === "alerts-btn" || item.id === "email-alerts-btn");
+      if (item && !reportsInPlace) closeMenu();
       else e.stopPropagation();
     });
 
@@ -77,11 +78,23 @@
     const favoritesOnlyFilterEl = document.getElementById("favorites-only-filter");
 
     const preferencesBtn = document.getElementById("preferences-btn");
-    const prefOpenOnlyEl = document.getElementById("pref-open-only");
     const prefSaveBtn = document.getElementById("pref-save-btn");
     const prefSkipBtn = document.getElementById("pref-skip-btn");
-    const prefEmailAlertsEl = document.getElementById("pref-email-alerts");
     const PREFS_KEY = "activityDashboardPreferences";
+
+    // Broad groups the preferences dialog offers instead of all fourteen
+    // activity types: {"Court & team sports": ["Badminton", ...]}. The
+    // filter bar still works in single types; this is only what a saved
+    // default may widen to.
+    let activityGroups = {};
+    try {
+      const groups = JSON.parse(document.getElementById("activity-groups").textContent);
+      for (const group of groups) activityGroups[group.name] = group.types;
+    } catch (err) {
+      // No groups just means every saved preference is a plain activity
+      // type, which is what they were before groups existed.
+      console.error("Could not parse activity groups:", err);
+    }
 
     let allEvents = [];
     try {
@@ -858,7 +871,7 @@
       const upcoming = allEvents.filter((ev) => !alreadyFinished(ev));
 
       return upcoming.filter((ev) => {
-        if (activeActivity !== "all" && ev.activity_type !== activeActivity) return false;
+        if (!matchesActivity(ev)) return false;
         if (area && ev.area !== area) return false;
         if (location && ev.location !== location) return false;
         if (keyword && !ev.event_name.toLowerCase().includes(keyword)) return false;
@@ -992,10 +1005,24 @@
       render();
     }
 
+    // activeActivity holds "all", one activity type, or the name of a group
+    // covering several. Groups named after a single type ("Skating") match
+    // identically either way, so the two never disagree.
+    function matchesActivity(ev) {
+      if (activeActivity === "all") return true;
+      const group = activityGroups[activeActivity];
+      if (group) return group.includes(ev.activity_type);
+      return ev.activity_type === activeActivity;
+    }
+
     function selectActivityChip(value) {
       activeActivity = value;
+      const group = activityGroups[value];
       activityFiltersEl.querySelectorAll(".chip").forEach((c) => {
-        c.classList.toggle("active", c.dataset.activity === value);
+        const type = c.dataset.activity;
+        // A group lights up every chip it contains, so the bar shows what
+        // is actually on screen rather than nothing at all.
+        c.classList.toggle("active", type === value || (!!group && group.includes(type)));
       });
     }
 
@@ -1106,13 +1133,48 @@
       // Narrow the venue list before restoring the saved venue, or the
       // saved value would be dropped as "not in this area" on every load.
       syncLocationOptions();
-      locationFilterEl.value = prefs.location || "";
-      openOnlyFilterEl.checked = !!prefs.openOnly;
+      // Both of these are still honoured from records saved before the
+      // dialog stopped offering them; they are just no longer asked for.
+      if ("location" in prefs) locationFilterEl.value = prefs.location || "";
+      if ("openOnly" in prefs) openOnlyFilterEl.checked = !!prefs.openOnly;
     }
 
     // Email alerts are an account setting rather than a view filter, so it is
     // kept out of applyPreferences (which only drives the visible filters).
     let emailAlertsEnabled = false;
+
+    // It used to be a checkbox in the preferences dialog, which put the one
+    // control here that sends real email in among the view filters. It now
+    // sits in the menu beside the push-notification toggle it belongs with.
+    const emailAlertsBtn = document.getElementById("email-alerts-btn");
+
+    function paintEmailAlerts() {
+      if (!emailAlertsBtn) return;
+      emailAlertsBtn.textContent = emailAlertsEnabled ? "✉ Email alerts on" : "✉ Email alerts off";
+      emailAlertsBtn.classList.toggle("alerts-on", emailAlertsEnabled);
+      emailAlertsBtn.title = emailAlertsEnabled
+        ? "You'll also get an email when a spot opens in a starred activity. Click to turn off."
+        : "Also get an email when a spot opens in one of your starred activities.";
+    }
+
+    if (emailAlertsBtn) {
+      emailAlertsBtn.addEventListener("click", async () => {
+        const wanted = !emailAlertsEnabled;
+        emailAlertsBtn.disabled = true;
+        try {
+          // Sent on its own, so toggling email never rewrites the saved
+          // filters — the preferences endpoint only touches what it is given.
+          await saveAccountPreferences({ emailAlerts: wanted });
+          emailAlertsEnabled = wanted;
+          paintEmailAlerts();
+        } catch (err) {
+          console.error("Failed to change email alerts:", err);
+          emailAlertsBtn.textContent = "✉ Email alerts failed";
+        } finally {
+          emailAlertsBtn.disabled = false;
+        }
+      });
+    }
 
     // --- Working out which area someone is in --------------------------
     //
@@ -1199,9 +1261,6 @@
         "pref-area",
         suggestedArea || (areaFilterEl ? areaFilterEl.value : "")
       );
-      setRadioGroupValue("pref-location", locationFilterEl.value);
-      prefOpenOnlyEl.checked = openOnlyFilterEl.checked;
-      if (prefEmailAlertsEl) prefEmailAlertsEl.checked = emailAlertsEnabled;
       preferencesModal.hidden = false;
     }
 
@@ -1420,17 +1479,13 @@
         const prefs = {
           activity: getRadioGroupValue("pref-activity"),
           area: getRadioGroupValue("pref-area"),
-          location: getRadioGroupValue("pref-location"),
-          openOnly: prefOpenOnlyEl.checked,
         };
-        if (prefEmailAlertsEl) {
-          emailAlertsEnabled = prefEmailAlertsEl.checked;
-          prefs.emailAlerts = emailAlertsEnabled;
-        }
         if (loggedIn) {
           await saveAccountPreferences(prefs);
         } else {
-          writeStoredPreferences(prefs);
+          // Merged, not replaced: a venue or open-only setting saved before
+          // this dialog stopped offering them should survive being re-saved.
+          writeStoredPreferences({ ...(readStoredPreferences() || {}), ...prefs });
         }
         applyPreferences(prefs);
         render();
@@ -1454,6 +1509,7 @@
         if (storedPrefs && typeof storedPrefs.emailAlerts === "boolean") {
           emailAlertsEnabled = storedPrefs.emailAlerts;
         }
+        paintEmailAlerts();
         // A stored record holding only the email-alert flag means the filter
         // preferences were never set, so still prompt for those.
         const hasFilterPrefs =

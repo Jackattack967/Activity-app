@@ -67,6 +67,14 @@
                 title="Get notified when a spot opens in one of your starred activities">🔔 Alerts</button>
         {% endif %}
 
+        {# Lives here rather than in the preferences dialog: it is an account
+           setting that sends real email, not one of the view filters that
+           dialog is for — and it belongs beside the other alert toggle. #}
+        {% if logged_in and email_alerts_available %}
+        <button id="email-alerts-btn" type="button" class="menu-item" role="menuitem"
+                title="Also send an email when a spot opens in one of your starred activities">✉ Email alerts</button>
+        {% endif %}
+
         {% if login_links %}
         <div class="menu-section-label">City sign-in</div>
         {% for link in login_links %}
@@ -167,45 +175,37 @@
 <div class="modal-overlay" id="preferences-modal" hidden>
   <div class="modal-card" role="dialog" aria-labelledby="preferences-title">
     <div class="modal-header">
-      <h2 id="preferences-title">What do you like to do?</h2>
+      <h2 id="preferences-title">Let's get you started</h2>
       <button id="pref-close-btn" type="button" class="modal-close" aria-label="Close">✕</button>
     </div>
-    <p class="modal-sub">Pick your defaults — you can always change filters afterward, and revisit this anytime with the Preferences button.</p>
+    <p class="modal-sub">Just a starting point — every filter above the schedule still works, and you can change these anytime.</p>
 
+    {# Two questions, not five. This used to list every activity type (14),
+       every area (5) and every venue (24): 43 radio buttons, growing with
+       each city added. The filter bar above the schedule still offers all
+       of them, so nothing here is a loss of control — only of clutter. #}
     <fieldset class="modal-fieldset">
-      <legend>Activity</legend>
-      <label><input type="radio" name="pref-activity" value="all" checked> All activities</label>
-      {% for a in activity_types %}
-      <label><input type="radio" name="pref-activity" value="{{ a }}"> {{ a }}</label>
-      {% endfor %}
-    </fieldset>
-
-    <fieldset class="modal-fieldset">
-      <legend>Area</legend>
-      <label><input type="radio" name="pref-area" value="" checked> All areas</label>
+      <legend>Where are you?</legend>
+      <label><input type="radio" name="pref-area" value="" checked> Anywhere</label>
       {% for area in areas %}
       <label><input type="radio" name="pref-area" value="{{ area }}"> {{ area }}</label>
       {% endfor %}
     </fieldset>
 
     <fieldset class="modal-fieldset">
-      <legend>Location</legend>
-      <label><input type="radio" name="pref-location" value="" checked> All locations</label>
-      {% for loc in locations %}
-      <label><input type="radio" name="pref-location" value="{{ loc }}"> {{ loc }}</label>
+      <legend>What are you into?</legend>
+      <label><input type="radio" name="pref-activity" value="all" checked> Anything</label>
+      {% for group in activity_groups or [] %}
+      <label>
+        <input type="radio" name="pref-activity" value="{{ group.name }}"> {{ group.name }}
+        <span class="pref-count" title="Sessions in the next {{ window_days }} days">{{ group.count }}</span>
+      </label>
+      {# Say what a grouped option covers, so nobody has to pick it to find out. #}
+      {% if group.types|length > 1 %}
+      <span class="pref-rollup">{{ group.types|join(', ')|lower }}</span>
+      {% endif %}
       {% endfor %}
     </fieldset>
-
-    <label class="modal-checkbox">
-      <input type="checkbox" id="pref-open-only"> Only show activities with open spots by default
-    </label>
-
-    {% if logged_in and email_alerts_available %}
-    <label class="modal-checkbox">
-      <input type="checkbox" id="pref-email-alerts">
-      Also email me when a spot opens in a starred activity
-    </label>
-    {% endif %}
 
     <div class="modal-actions">
       <button id="pref-skip-btn" type="button" class="btn-secondary">Skip for now</button>
@@ -231,6 +231,9 @@
 </footer>
 
 <script id="events-data" type="application/json">{{ events | tojson }}</script>
+{# "or []" so a missing context variable degrades to "Anything" only,
+   rather than failing to serialise and taking the whole page down. #}
+<script id="activity-groups" type="application/json">{{ (activity_groups or []) | tojson }}</script>
 <script id="user-data" type="application/json">{{ {"loggedIn": logged_in} | tojson }}</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script>

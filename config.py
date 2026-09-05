@@ -307,3 +307,36 @@ AREAS = (
 CITY_AREAS = {
     city: area["name"] for area in AREAS for city in area["cities"]
 }
+
+# Broad activity groups, offered only as a starting preference.
+#
+# The filter bar above the schedule still offers all fourteen activity types
+# individually — nothing is lost. These exist because the first-run dialog
+# was asking a question with fourteen answers, most of which nobody chooses:
+# "Adult" is snooker and computer help, "All Ages" is gymnastics and
+# childminding, "Youth" is two chess games. Those are calendar labels, not
+# choices, and they made the real choices harder to see.
+#
+# A group whose types are None collects everything the named groups didn't
+# claim. That entry is what keeps this list honest: an activity type a
+# portal invents next month appears there on its own rather than quietly
+# becoming unreachable from this dialog.
+ACTIVITY_GROUPS = (
+    ("Skating", ("Skating",)),
+    ("Swimming", ("Swimming",)),
+    (
+        "Court & team sports",
+        (
+            "Badminton",
+            "Basketball",
+            "Pickleball",
+            "Volleyball",
+            "Table Tennis",
+            "Soccer",
+            "Sports",
+            "Court Booking",
+        ),
+    ),
+    ("Fitness classes", ("Fitness",)),
+    ("Everything else", None),
+)

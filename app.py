@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import collections
 import dataclasses
 import datetime as dt
 import logging
@@ -116,6 +117,42 @@ def _with_place(event: dict) -> dict:
     lat, lng = config.FACILITY_COORDS.get(event.get("location") or "", (None, None))
     area = config.CITY_AREAS.get(event.get("source_name") or "", "")
     return {**event, "lat": lat, "lng": lng, "area": area}
+
+
+def _activity_groups(events: list[dict]) -> list[dict]:
+    """The activity groups that actually have sessions, in configured order.
+
+    Each carries the types it covers, so the browser can filter on group
+    membership, and a count, so the dialog can say how much a group is
+    hiding before someone picks it.
+
+    The open-ended group (types of None in config) takes whatever the named
+    ones left over. Computing it rather than listing it means a new activity
+    type shows up somewhere instead of nowhere.
+    """
+    present = collections.Counter(e["activity_type"] for e in events)
+    claimed = {
+        activity
+        for _, types in config.ACTIVITY_GROUPS
+        if types
+        for activity in types
+    }
+
+    groups = []
+    for name, types in config.ACTIVITY_GROUPS:
+        members = sorted(
+            set(types) & set(present) if types else set(present) - claimed
+        )
+        if not members:
+            continue  # nothing scheduled — don't offer a choice that shows nothing
+        groups.append(
+            {
+                "name": name,
+                "types": members,
+                "count": sum(present[activity] for activity in members),
+            }
+        )
+    return groups
 
 
 def _get_events(force: bool = False) -> dict:
@@ -277,6 +314,7 @@ def index():
         errors=data["errors"],
         fetched_at=data["fetched_at"],
         activity_types=activity_types,
+        activity_groups=_activity_groups(events),
         locations=locations,
         areas=areas,
         window_days=config.SCHEDULE_WINDOW_DAYS,
@@ -453,10 +491,14 @@ def api_preferences():
         if pref is None:
             pref = Preference(user_id=current_user.id)
             db.session.add(pref)
-        pref.activity = body.get("activity") or "all"
-        pref.location = body.get("location") or ""
-        pref.area = body.get("area") or ""
-        pref.open_only = bool(body.get("openOnly"))
+        if "activity" in body:
+            pref.activity = body.get("activity") or "all"
+        if "location" in body:
+            pref.location = body.get("location") or ""
+        if "area" in body:
+            pref.area = body.get("area") or ""
+        if "openOnly" in body:
+            pref.open_only = bool(body.get("openOnly"))
         if "emailAlerts" in body:
             current_user.email_alerts = bool(body.get("emailAlerts"))
         db.session.commit()

@@ -807,6 +807,25 @@ footer a { color: var(--text-muted); }
   margin-bottom: 1.25rem;
 }
 
+/* How many sessions an option covers. Pushed to the right so the option
+   names stay a clean column to read down. */
+.pref-count {
+  margin-left: auto;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* What a grouped option actually contains, under its label — so nobody has
+   to select "Court & team sports" to discover whether it includes squash. */
+.pref-rollup {
+  display: block;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  margin: 0.1rem 0 0.4rem 1.6rem;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
