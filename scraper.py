@@ -1,285 +1,58 @@
-"""Scraper for PerfectMind-based municipal recreation booking widgets.
+"""Picks the right scraper for each configured source, and runs them all.
 
-PerfectMind (used by many BC municipalities, including Coquitlam) renders its
-drop-in schedules through a JSON API rather than static HTML. The flow is:
+The cities in `config.SOURCES` do not all run the same booking software.
+Coquitlam, Port Moody and New Westminster are on PerfectMind; Port
+Coquitlam is on ActiveNet. Each platform gets a module that knows how to
+talk to it and returns the same `Event` objects, so nothing downstream —
+the cache, the dashboard, the alert watcher — has to care which is which.
 
-  1. GET the calendar's "Classes" page. This returns server-rendered HTML
-     containing a hidden anti-forgery token, and sets a session cookie.
-  2. POST that token (plus the session cookie) to the ClassesV2 endpoint
-     with a date range filter. It returns JSON with the schedule.
-
-This module reproduces that flow with `requests` instead of a browser.
+Adding a platform means writing one module with `fetch_calendar_events()`
+and `build_login_url()`, then listing it in PLATFORMS below.
 """
 
 from __future__ import annotations
 
-import datetime as dt
 import logging
-import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
-from urllib.parse import quote
-from zoneinfo import ZoneInfo
 
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
+import scraper_activenet
+import scraper_perfectmind
+
+# Re-exported so callers can keep saying scraper.Event / scraper.classify_activity.
+from events import Event, classify_activity  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
-# Matches the whole <input> tag first, then pulls value= out of it, so this
-# doesn't break if the portal ever reorders the tag's attributes.
-TOKEN_TAG_RE = re.compile(r'<input[^>]*name="__RequestVerificationToken"[^>]*>')
-VALUE_ATTR_RE = re.compile(r'value="([^"]*)"')
+PLATFORMS = {
+    "perfectmind": scraper_perfectmind,
+    "activenet": scraper_activenet,
+}
 
-USER_AGENT = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "activity-schedule-dashboard/1.0 (+local scraper for public drop-in schedules)"
-)
-
-MAX_PAGES = 5  # safety cap on "load more" pagination per calendar
-
-DEFAULT_TIMEZONE = "America/Vancouver"
-
-# Several drop-in calendars are mixed bags — one "Adult" calendar carries
-# badminton, basketball, chess, art studio and movie matinees alike. Tagging
-# every event with its calendar's category would therefore file chess under
-# sports, so the specific sport is recognised from the event name and only
-# unrecognised events fall back to the calendar's configured type.
-#
-# Ordered: the first match wins, so put more specific patterns first.
-_ACTIVITY_PATTERNS = (
-    ("Badminton", re.compile(r"\bbadminton\b", re.I)),
-    ("Basketball", re.compile(r"\bbasketball\b", re.I)),
-    ("Soccer", re.compile(r"\bsoccer\b|\bfutsal\b", re.I)),
-    ("Volleyball", re.compile(r"\bvolleyball\b", re.I)),
-    ("Pickleball", re.compile(r"\bpickleball\b", re.I)),
-    ("Table Tennis", re.compile(r"\btable tennis\b|\bping[- ]?pong\b", re.I)),
-)
+# What a source without an explicit "platform" is assumed to be. Every
+# source predating multi-platform support was PerfectMind.
+DEFAULT_PLATFORM = "perfectmind"
 
 
-def classify_activity(event_name: str, fallback: str) -> str:
-    """Name-derived activity type, falling back to the calendar's category.
-
-    Note there is deliberately no rule mapping "hockey" to skating: the
-    sports calendars contain *floor* hockey, which is not on ice.
-    """
-    for activity, pattern in _ACTIVITY_PATTERNS:
-        if pattern.search(event_name or ""):
-            return activity
-    return fallback
-
-
-def _build_session() -> requests.Session:
-    session = requests.Session()
-    retry = Retry(
-        total=3,
-        backoff_factor=1,
-        status_forcelist=[500, 502, 503, 504],
-        allowed_methods=["GET", "POST"],
-    )
-    adapter = HTTPAdapter(max_retries=retry)
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
-    return session
+def _module_for(source: dict):
+    name = source.get("platform", DEFAULT_PLATFORM)
+    try:
+        return PLATFORMS[name]
+    except KeyError:
+        raise ValueError(
+            f"Unknown platform {name!r} for source "
+            f"{source.get('source_name', '?')} / {source.get('calendar_label', '?')}. "
+            f"Known platforms: {', '.join(sorted(PLATFORMS))}."
+        ) from None
 
 
-@dataclass
-class Event:
-    activity_type: str
-    event_name: str
-    date: str  # ISO YYYY-MM-DD
-    day_of_week: str
-    start_time: str
-    end_time: str
-    facility: str
-    location: str
-    price: str
-    spots: str
-    status: str
-    source_name: str
-    calendar_label: str
-    course_id: str = ""
-    details: str = ""
-    detail_url: str = ""
-    # True when the portal offers its own waitlist for this (full) session.
-    has_waitlist: bool = False
+def fetch_calendar_events(source: dict, days_ahead: int) -> list[Event]:
+    """Fetch and normalize events for a single source, whatever it runs on."""
+    return _module_for(source).fetch_calendar_events(source, days_ahead)
 
 
 def build_login_url(source: dict) -> str:
-    """URL for the portal's own official sign-in page.
-
-    We never touch credentials ourselves — this just sends the user to log
-    in directly on the city's real site, in their own browser, so their
-    session there is already active when they click a "Register" link.
-    """
-    widget_url = f"{source['base_url']}/{source['org_path']}/BookMe4?widgetId={source['widget_id']}"
-    # MemberRegistration lives directly under the top-level org segment even
-    # for cities whose org_path has a "/Clients" suffix for the BookMe4
-    # routes (e.g. Coquitlam is "23902/Clients" for booking, but login is
-    # under plain "23902") — so only the first path segment applies here.
-    org_root = source["org_path"].split("/", 1)[0]
-    return (
-        f"{source['base_url']}/{org_root}/MemberRegistration/MemberSignIn"
-        f"?returnUrl={quote(widget_url, safe='')}"
-    )
-
-
-def _get_session_and_token(session: requests.Session, source: dict) -> str:
-    url = (
-        f"{source['base_url']}/{source['org_path']}/BookMe4BookingPages/Classes"
-        f"?calendarId={source['calendar_id']}&widgetId={source['widget_id']}&embed=False"
-    )
-    resp = session.get(url, headers={"User-Agent": USER_AGENT}, timeout=20)
-    resp.raise_for_status()
-    tag_match = TOKEN_TAG_RE.search(resp.text)
-    value_match = VALUE_ATTR_RE.search(tag_match.group(0)) if tag_match else None
-    if not value_match:
-        raise RuntimeError(
-            f"Could not find anti-forgery token on {url}; the portal's page "
-            "structure may have changed."
-        )
-    return value_match.group(1)
-
-
-def _fetch_classes_page(
-    session: requests.Session,
-    source: dict,
-    token: str,
-    date_from: dt.datetime,
-    date_to: dt.datetime,
-    page: int,
-) -> dict:
-    post_url = (
-        f"{source['base_url']}/{source['org_path']}/BookMe4BookingPagesV2/ClassesV2"
-    )
-    body = {
-        "calendarId": source["calendar_id"],
-        "widgetId": source["widget_id"],
-        "page": str(page),
-        "values[0][Name]": "Date Range",
-        "values[0][Value]": date_from.strftime("%Y-%m-%dT00:00:00.000Z"),
-        "values[0][Value2]": date_to.strftime("%Y-%m-%dT00:00:00.000Z"),
-        "values[0][ValueKind]": "6",
-        "__RequestVerificationToken": token,
-    }
-    resp = session.post(
-        post_url,
-        data=body,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-            "X-Requested-With": "XMLHttpRequest",
-        },
-        timeout=20,
-    )
-    resp.raise_for_status()
-    return resp.json()
-
-
-def _normalize(raw: dict, source: dict) -> Event:
-    occurrence = raw.get("OccurrenceDate", "")
-    if len(occurrence) == 8:
-        iso_date = f"{occurrence[0:4]}-{occurrence[4:6]}-{occurrence[6:8]}"
-        day_of_week = dt.date(
-            int(occurrence[0:4]), int(occurrence[4:6]), int(occurrence[6:8])
-        ).strftime("%A")
-    else:
-        iso_date = ""
-        day_of_week = ""
-
-    status = raw.get("BookButtonText") or ""
-    if not status:
-        status = "Closed" if not raw.get("Spots") else raw.get("Spots", "")
-
-    event_id = raw.get("EventId", "")
-    detail_url = (
-        f"{source['base_url']}/{source['org_path']}/BookMe4LandingPages/Class"
-        f"?widgetId={source['widget_id']}&redirectedFromEmbededMode=False"
-        f"&classId={event_id}&occurrenceDate={occurrence}"
-        if event_id and occurrence
-        else ""
-    )
-
-    # BookButtonDescription carries the waitlist wording (e.g. "Add to Stick,
-    # Ring & Puck waitlist") on nearly every session, including ones that are
-    # simply not open for registration yet — so it alone would mislabel those
-    # as full. Only advertise a waitlist when the session is actually Full.
-    spots_text = (raw.get("Spots") or "").strip().lower()
-    has_waitlist = (
-        "waitlist" in (raw.get("BookButtonDescription") or "").lower()
-        and "full" in spots_text
-    )
-
-    event_name = raw.get("EventName", "").strip()
-
-    return Event(
-        activity_type=classify_activity(event_name, source["activity_type"]),
-        event_name=event_name,
-        date=iso_date,
-        day_of_week=day_of_week,
-        start_time=raw.get("FormattedStartTime", ""),
-        end_time=raw.get("FormattedEndTime", ""),
-        facility=raw.get("Facility") or raw.get("Location") or "",
-        location=raw.get("Location", ""),
-        price=raw.get("PriceRange", ""),
-        spots=raw.get("Spots", ""),
-        status=status,
-        source_name=source["source_name"],
-        calendar_label=source["calendar_label"],
-        course_id=raw.get("CourseIdTrimmed", ""),
-        details=(raw.get("Details") or "").strip(),
-        detail_url=detail_url,
-        has_waitlist=has_waitlist,
-    )
-
-
-def fetch_calendar_events(
-    source: dict, days_ahead: int
-) -> list[Event]:
-    """Fetch and normalize events for a single calendar source."""
-    # Use the venue's local calendar date, not the scraping server's (Render
-    # isn't necessarily in Pacific time) and not UTC — otherwise "today"
-    # can silently shift by a day depending on where/when this runs.
-    tz = ZoneInfo(source.get("timezone", DEFAULT_TIMEZONE))
-    today_local = dt.datetime.now(tz).date()
-    date_from = dt.datetime.combine(today_local, dt.time.min)
-    date_to = date_from + dt.timedelta(days=days_ahead)
-
-    session = _build_session()
-    token = _get_session_and_token(session, source)
-
-    events: list[Event] = []
-    seen_event_ids: set[str] = set()
-
-    for page in range(MAX_PAGES):
-        data = _fetch_classes_page(session, source, token, date_from, date_to, page)
-        classes = data.get("classes", [])
-        if not classes:
-            break
-
-        new_count = 0
-        for raw in classes:
-            event_id = raw.get("EventId", "")
-            if event_id and event_id in seen_event_ids:
-                continue
-            if event_id:
-                seen_event_ids.add(event_id)
-            events.append(_normalize(raw, source))
-            new_count += 1
-
-        if new_count == 0:
-            break  # this page was all duplicates; nothing more to gain
-    else:
-        logger.warning(
-            "Hit the %d-page pagination cap for %s / %s — some events may "
-            "have been left out. Consider raising MAX_PAGES.",
-            MAX_PAGES,
-            source["source_name"],
-            source["calendar_label"],
-        )
-
-    return events
+    """URL for that city's own official sign-in page."""
+    return _module_for(source).build_login_url(source)
 
 
 def fetch_all_events(sources: list[dict], days_ahead: int) -> tuple[list[Event], list[str]]:
@@ -293,7 +66,7 @@ def fetch_all_events(sources: list[dict], days_ahead: int) -> tuple[list[Event],
     all_events: list[Event] = []
     errors: list[str] = []
 
-    with ThreadPoolExecutor(max_workers=min(len(sources), 5) or 1) as pool:
+    with ThreadPoolExecutor(max_workers=min(len(sources), 8) or 1) as pool:
         future_to_source = {
             pool.submit(fetch_calendar_events, source, days_ahead): source
             for source in sources

@@ -101,18 +101,21 @@ _cache_lock = threading.Lock()
 _cache: dict = {"events": [], "errors": [], "fetched_at": 0.0}
 
 
-def _with_coords(event: dict) -> dict:
-    """Add lat/lng for the event's venue, if we know where it is.
+def _with_place(event: dict) -> dict:
+    """Add lat/lng and the area for the event's venue, if we know them.
 
-    Done here, once per scrape, rather than per request: the coordinates are
-    static, so recomputing them on every page load would be pure waste.
+    Done here, once per scrape, rather than per request: both are static,
+    so recomputing them on every page load would be pure waste.
 
-    A venue missing from the table gets lat/lng of None rather than raising.
-    The map then simply has no marker for it, which is the right failure: a
-    new venue appearing in a portal should cost us a pin, not the dashboard.
+    A venue missing from the coordinate table gets lat/lng of None rather
+    than raising. The map then simply has no marker for it, which is the
+    right failure: a new venue appearing in a portal should cost us a pin,
+    not the dashboard. An unrecognised city gets an empty area and shows up
+    under "All areas" — again visible, rather than silently dropped.
     """
     lat, lng = config.FACILITY_COORDS.get(event.get("location") or "", (None, None))
-    return {**event, "lat": lat, "lng": lng}
+    area = config.CITY_AREAS.get(event.get("source_name") or "", "")
+    return {**event, "lat": lat, "lng": lng, "area": area}
 
 
 def _get_events(force: bool = False) -> dict:
@@ -122,7 +125,7 @@ def _get_events(force: bool = False) -> dict:
             events, errors = scraper.fetch_all_events(
                 config.SOURCES, config.SCHEDULE_WINDOW_DAYS
             )
-            fresh = [_with_coords(dataclasses.asdict(e)) for e in events]
+            fresh = [_with_place(dataclasses.asdict(e)) for e in events]
             if not fresh and errors and _cache["events"]:
                 # Every source failed. That means the portals were
                 # unreachable, not that every session was cancelled — so
@@ -264,6 +267,10 @@ def index():
     activity_types = sorted({e["activity_type"] for e in events})
     locations = sorted({e["location"] for e in events if e["location"]})
     source_names = sorted({s["source_name"] for s in config.SOURCES})
+    # Only areas that actually have sessions right now, in configured order,
+    # so the filter never offers a choice that returns nothing.
+    present = {e["area"] for e in events if e.get("area")}
+    areas = [area["name"] for area in config.AREAS if area["name"] in present]
     return render_template(
         "index.html",
         events=events,
@@ -271,6 +278,7 @@ def index():
         fetched_at=data["fetched_at"],
         activity_types=activity_types,
         locations=locations,
+        areas=areas,
         window_days=config.SCHEDULE_WINDOW_DAYS,
         login_links=_login_links(),
         source_names=source_names,
@@ -447,6 +455,7 @@ def api_preferences():
             db.session.add(pref)
         pref.activity = body.get("activity") or "all"
         pref.location = body.get("location") or ""
+        pref.area = body.get("area") or ""
         pref.open_only = bool(body.get("openOnly"))
         if "emailAlerts" in body:
             current_user.email_alerts = bool(body.get("emailAlerts"))
@@ -460,6 +469,7 @@ def api_preferences():
         {
             "activity": pref.activity,
             "location": pref.location,
+            "area": pref.area or "",
             "openOnly": pref.open_only,
             "emailAlerts": bool(current_user.email_alerts),
         }

@@ -1,26 +1,39 @@
 # Activity Schedule Dashboard
 
-Scrapes public drop-in activity schedules (skating, swimming, etc.) from a
-municipal PerfectMind recreation portal and shows them in one unified,
+Scrapes public drop-in activity schedules (skating, swimming, sports,
+fitness) from municipal recreation portals and shows them in one unified,
 filterable dashboard.
 
-Currently configured for **City of Coquitlam** and **City of Port Moody**
-(Skating + Swimming, next 14 days). See [`config.py`](config.py) for how to
-point it at additional calendars or another PerfectMind-based city.
+Currently configured for **Coquitlam**, **Port Coquitlam**, **Port Moody**
+and **New Westminster** — around 600 sessions across 23 venues over the next
+14 days. See [`config.py`](config.py) for how to add a calendar or a city.
+
+Cities don't all run the same booking software, so the scraper is split by
+platform: [`scraper.py`](scraper.py) picks a module per source, and
+[`scraper_perfectmind.py`](scraper_perfectmind.py) and
+[`scraper_activenet.py`](scraper_activenet.py) each return the same `Event`
+objects. Nothing downstream knows or cares which portal an event came
+from.
 
 ## How it works
 
-- [`scraper.py`](scraper.py) replicates the browser flow the portal's own
-  widget uses: load the calendar page to get a session + anti-forgery token,
-  then POST that token to the portal's JSON API (`ClassesV2`) for a date
-  range. No HTML scraping/parsing is needed — the portal returns structured
-  JSON.
+- [`scraper_perfectmind.py`](scraper_perfectmind.py) replicates the browser
+  flow the portal's own widget uses: load the calendar page to get a session
+  + anti-forgery token, then POST that token to the portal's JSON API
+  (`ClassesV2`) for a date range. No HTML scraping/parsing is needed — the
+  portal returns structured JSON.
+- [`scraper_activenet.py`](scraper_activenet.py) does the same for ActiveNet
+  portals, which need no token — just a warm-up request for cookies, then a
+  paged JSON search. Its one real complication is that ActiveNet returns
+  *activities* rather than occurrences, so a recurring one is expanded
+  across its weekdays.
 - [`app.py`](app.py) is a small Flask app that fetches all configured
   calendars, caches the merged result in memory for 15 minutes
   (`CACHE_TTL_SECONDS` in `config.py`), and serves it as a dashboard page and
   a `/api/events` JSON endpoint.
 - The dashboard (`templates/index.html` + `static/app.js`) lets you filter by
-  activity type, location, keyword, and "open spots only", grouped by day.
+  activity type, area, location, keyword, and "open spots only", grouped by
+  day — or shows the same filtered set on a map.
 
 ## Run it locally
 
@@ -73,17 +86,28 @@ Linux servers.)
 
 ## Adding another city/portal
 
-Only cities using PerfectMind's `BookMe4` widget work as-is. To add one:
+Cities on PerfectMind's `BookMe4` widget or on ActiveNet work as-is — add an
+entry to `SOURCES` in `config.py` and give it the matching `platform`. The
+comment at the top of that file has the steps for finding the ids each one
+needs, including the public ActiveNet endpoint that lists a city's buildings
+and categories.
 
-1. Open that city's PerfectMind widget in a browser.
-2. Click through to the drop-in category you want.
-3. Copy `calendarId` and `widgetId` from the resulting URL, and the
-   `base_url`/`org_path` from the domain and path (see the comment at the
-   top of `config.py` — this part varies between cities).
-4. Add an entry to `SOURCES` in `config.py`.
+Then add the city to `AREAS` and its venues to `FACILITY_COORDS`, both in
+`config.py`. Neither is required for the schedule itself: a venue with no
+coordinates simply gets no map pin, and a city with no area shows only under
+"All areas".
 
-A different booking platform (ActiveNet, RecTrac, Amilia, etc.) would need
-its own scraper module, since each has a different API/HTML shape.
+A third booking platform (RecTrac, Amilia, Xplor, etc.) needs its own
+module, since each has a different API shape. Write one exposing
+`fetch_calendar_events()` and `build_login_url()`, then list it in
+`PLATFORMS` in `scraper.py` — nothing else has to change.
+
+### Which cities are on what
+
+Not every neighbour is reachable. Metro Vancouver PerfectMind tenants exist
+for Coquitlam, Port Moody, New Westminster, Maple Ridge, Delta, White Rock,
+Surrey and North Vancouver (NVRC). Port Coquitlam and Burnaby are on
+ActiveNet. Vancouver and Richmond are on neither.
 
 ## Configuration
 
@@ -126,6 +150,33 @@ milliseconds, rather than at `/api/check-watches`, which does a full scrape.
 `/api/watch-status` reports `autowatch: true|false` so you can tell from
 outside whether the loop is actually running.
 
+## Areas, and picking one
+
+Every event is tagged with an area — currently one per city — from
+`CITY_AREAS`, which `config.py` builds out of `AREAS`. That tag drives three
+things: the Area filter, the colour of a venue's ring on the map, and which
+zone outline it falls inside.
+
+Areas are keyed on the *city*, not the venue, so a venue that appears in a
+portal tomorrow lands in the right area with no code change. Only
+`FACILITY_COORDS` needs a new entry, and only for the map pin.
+
+The map draws each area as a hull around its own venues rather than a
+circle. A circle wide enough to cover Coquitlam's ten venues — Maillardville
+in the south-west out to Smiling Creek in the north-east — is about 6.7 km
+across, which swallows both Port Moody and Port Coquitlam whole. Hulls of
+the same venues don't overlap at all.
+
+On a first visit the app asks once for your location and preselects the
+nearest area in the preferences dialog. It picks the area of the closest
+*venue*, not the closest area centre: Port Moody's three venues average out
+to a point that is nearer Coquitlam's centre than its own, so centres answer
+"Coquitlam" while standing at Port Moody city hall. The prompt is shown at
+most once ever — a refusal is remembered as firmly as a permission — nothing
+waits on it for more than seven seconds, and every failure just leaves "All
+areas" selected. The coordinates are compared against the venues already on
+the page and then discarded; they are never sent anywhere.
+
 ## Unused accounts are deleted
 
 An account that goes unused for six months is deleted, along with its watches,
@@ -146,6 +197,17 @@ Two safeguards are deliberate:
 Run `python test_retention.py` to exercise the rules against a throwaway
 sqlite database. It never touches the real one.
 
+## Tests
+
+All three are plain scripts — no pytest, no network, no real database. Each
+exits non-zero on failure.
+
+```bash
+python test_scrapers.py     # platform routing, and parsing captured API rows
+python test_retention.py    # the deletion rules, against throwaway sqlite
+python test_autowatch.py    # the in-app watch loop, with shortened intervals
+```
+
 ## License
 
 This project's own code is released under the [MIT License](LICENSE). The
@@ -160,6 +222,7 @@ listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) — chiefly
 [Authlib](https://authlib.org/), [Requests](https://requests.readthedocs.io/),
 [Gunicorn](https://gunicorn.org/) and [pywebpush](https://github.com/web-push-libs/pywebpush).
 
-Schedule data comes from the public booking portals of the City of Coquitlam
-and the City of Port Moody. This project is unofficial and is not affiliated
-with, endorsed by, or operated by either city or by PerfectMind.
+Schedule data comes from the public booking portals of the Cities of
+Coquitlam, Port Coquitlam, Port Moody and New Westminster. This project is
+unofficial and is not affiliated with, endorsed by, or operated by any of
+those cities, or by PerfectMind or Active Network.

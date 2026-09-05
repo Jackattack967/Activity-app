@@ -70,6 +70,7 @@
     const lastUpdatedEl = document.getElementById("last-updated");
     const refreshBtn = document.getElementById("refresh-btn");
     const activityFiltersEl = document.getElementById("activity-filters");
+    const areaFilterEl = document.getElementById("area-filter");
     const locationFilterEl = document.getElementById("location-filter");
     const keywordFilterEl = document.getElementById("keyword-filter");
     const openOnlyFilterEl = document.getElementById("open-only-filter");
@@ -438,15 +439,51 @@
     const mapEl = document.getElementById("facility-map");
     const mapNoteEl = document.getElementById("map-note");
 
+    const mapAreaLegendEl = document.getElementById("map-area-legend");
+
     // Roughly centres the Tri-Cities, used only until markers exist to fit.
     const MAP_HOME = [49.2695, -122.8175];
     const MAP_HOME_ZOOM = 12;
     // Long popups are unusable on a phone; the rest stay in the list view.
     const MAX_POPUP_SESSIONS = 8;
 
+    // One colour per area, in the order config.py lists them. Areas are
+    // named on the server, so this is looked up by name with a fallback
+    // rather than by index — adding a city must never silently re-colour
+    // every existing area.
+    const AREA_COLORS = {
+      Coquitlam: "#2563eb",
+      "Port Coquitlam": "#c2410c",
+      "Port Moody": "#0f766e",
+      "New Westminster": "#7c3aed",
+    };
+    const AREA_FALLBACK_COLOR = "#64748b";
+
+    function areaColor(area) {
+      return AREA_COLORS[area] || AREA_FALLBACK_COLOR;
+    }
+
+    // A zone should read as "roughly here", not as a claim about a city
+    // boundary, so it is drawn from the venues themselves and padded out.
+    //
+    // It is a hull around the venues rather than a circle. A circle centred
+    // on Coquitlam's ten venues has to be about 6.7 km wide to reach
+    // Maillardville and Smiling Creek, which is wide enough to swallow both
+    // Port Moody and Port Coquitlam whole — so the circles said nothing.
+    // Hulls of the same venues do not overlap at all.
+    const ZONE_PADDING_METRES = 450;
+    // Below three venues there is no polygon to draw, so those fall back to
+    // a small circle — kept tight, since it has no shape to justify itself.
+    const ZONE_FALLBACK_RADIUS_METRES = 650;
+    // A hull thinner than the padding around it is a line, not an area, so
+    // it takes the circle instead. Squaring the padding is the natural
+    // scale for "too small to be worth outlining".
+    const ZONE_MIN_AREA_SQ_METRES = 450 * 450;
+
     let currentView = "list";
     let map = null;
     let markerLayer = null;
+    let zoneLayer = null;
     // Which venues the current framing was chosen for, so the view is only
     // re-fitted when that set changes.
     let lastFitKey = null;
@@ -476,25 +513,179 @@
 
       L.control.scale({ imperial: false }).addTo(map);
 
+      // Zones sit under the markers, so a pin is never obscured by the
+      // tint of the area it belongs to.
+      zoneLayer = L.layerGroup().addTo(map);
       markerLayer = L.layerGroup().addTo(map);
       return true;
     }
 
-    function venueIcon(count, openCount) {
+    function venueIcon(count, openCount, area) {
       // A numbered circle rather than Leaflet's default teardrop pin: the
       // count is the most useful thing about a venue at a glance, and a pin
       // that carries it saves opening the popup to find out. Green when
       // something is actually bookable there, matching the badges.
+      //
+      // The area is shown as the ring around the pin rather than as its
+      // fill, because open-vs-full is the more important of the two and had
+      // the fill first. A pin therefore answers "can I go?" by colour and
+      // "whereabouts is this?" by ring, without either overwriting the
+      // other.
       const cls = "venue-marker" + (openCount > 0 ? " venue-marker-open" : "");
-      // count is an array length, never scraped text — safe to interpolate.
+      // count is an array length and the colour comes from the table above,
+      // so neither is scraped text — safe to interpolate. Venue names are
+      // not interpolated anywhere here; see buildPopup.
       return L.divIcon({
         className: "",
-        html: `<div class="${cls}"><span>${count}</span></div>`,
+        html:
+          `<div class="${cls}" style="--area-color:${areaColor(area)}">` +
+          `<span>${count}</span></div>`,
         iconSize: [36, 36],
         iconAnchor: [18, 18],
         popupAnchor: [0, -20],
         tooltipAnchor: [0, -20],
       });
+    }
+
+    // Metres between two lat/lng pairs. The equirectangular approximation is
+    // wrong by well under a metre at these distances, and the alternative is
+    // a trig-heavy haversine for a number only ever used to size a circle
+    // and to rank areas by nearness.
+    function distanceMetres(a, b) {
+      const toRad = Math.PI / 180;
+      const meanLat = ((a[0] + b[0]) / 2) * toRad;
+      const x = (b[1] - a[1]) * toRad * Math.cos(meanLat);
+      const y = (b[0] - a[0]) * toRad;
+      return Math.sqrt(x * x + y * y) * 6371000;
+    }
+
+    function centroid(points) {
+      const lat = points.reduce((sum, p) => sum + p[0], 0) / points.length;
+      const lng = points.reduce((sum, p) => sum + p[1], 0) / points.length;
+      return [lat, lng];
+    }
+
+    // Where each area is, derived from the venues in the data rather than
+    // configured separately — so a new venue moves its area's centre on its
+    // own and there is no second list to keep in step.
+    function areaCentres(events) {
+      const points = new Map();
+      for (const ev of events) {
+        if (!ev.area || typeof ev.lat !== "number" || typeof ev.lng !== "number") continue;
+        if (!points.has(ev.area)) points.set(ev.area, new Map());
+        // Keyed by venue so a busy centre doesn't drag the centroid toward
+        // itself just by having more sessions than its neighbours.
+        points.get(ev.area).set(ev.location, [ev.lat, ev.lng]);
+      }
+      const result = new Map();
+      for (const [area, venues] of points) {
+        const coords = Array.from(venues.values());
+        result.set(area, { centre: centroid(coords), coords });
+      }
+      return result;
+    }
+
+    // Andrew's monotone chain: sort the points, then sweep the lower and
+    // upper edges, dropping any point that turns the wrong way. Returns the
+    // outline in order, or fewer than three points if they are collinear.
+    function convexHull(points) {
+      const sorted = points
+        .slice()
+        .sort((a, b) => a[0] - b[0] || a[1] - b[1])
+        .filter((p, i, all) => i === 0 || p[0] !== all[i - 1][0] || p[1] !== all[i - 1][1]);
+      if (sorted.length < 3) return sorted;
+
+      const cross = (o, a, b) =>
+        (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+
+      const build = (list) => {
+        const out = [];
+        for (const p of list) {
+          while (out.length >= 2 && cross(out[out.length - 2], out[out.length - 1], p) <= 0) {
+            out.pop();
+          }
+          out.push(p);
+        }
+        out.pop();
+        return out;
+      };
+      return build(sorted).concat(build(sorted.slice().reverse()));
+    }
+
+    // Roughly how much ground a hull encloses, in square metres. Used only
+    // to reject shapes too thin to mean anything: the collinearity test in
+    // convexHull compares a floating-point cross product against zero, and
+    // three venues along one road produce a value that is merely nearly
+    // zero, so they survive as a hull with no width. Measuring the result
+    // catches that where testing the arithmetic cannot.
+    function polygonAreaMetres(points) {
+      if (points.length < 3) return 0;
+      const latMetres = 111320;
+      const lngMetres = latMetres * Math.cos((points[0][0] * Math.PI) / 180);
+      let sum = 0;
+      for (let i = 0; i < points.length; i += 1) {
+        const [aLat, aLng] = points[i];
+        const [bLat, bLng] = points[(i + 1) % points.length];
+        sum += aLng * lngMetres * (bLat * latMetres) - bLng * lngMetres * (aLat * latMetres);
+      }
+      return Math.abs(sum) / 2;
+    }
+
+    // A hull runs exactly through the outermost venues, which would clip
+    // those markers in half. Pushing each corner away from the centre gives
+    // the outline some breathing room without needing real polygon offset.
+    function padOutward(points, centre, metres) {
+      const latMetres = 111320;
+      const lngMetres = latMetres * Math.cos((centre[0] * Math.PI) / 180);
+      return points.map(([lat, lng]) => {
+        const dLat = lat - centre[0];
+        const dLng = lng - centre[1];
+        const length = Math.hypot(dLat * latMetres, dLng * lngMetres);
+        if (!length) return [lat, lng];
+        const scale = (length + metres) / length;
+        return [centre[0] + dLat * scale, centre[1] + dLng * scale];
+      });
+    }
+
+    function renderZones(visible) {
+      zoneLayer.clearLayers();
+      const centres = areaCentres(visible);
+
+      // With one area on screen the tint says nothing the map doesn't
+      // already show, and it only dulls the tiles underneath.
+      if (centres.size > 1) {
+        for (const [area, { centre, coords }] of centres) {
+          const style = {
+            color: areaColor(area),
+            weight: 1,
+            opacity: 0.5,
+            fillColor: areaColor(area),
+            fillOpacity: 0.07,
+            interactive: false,
+          };
+          const hull = convexHull(coords);
+          if (hull.length >= 3 && polygonAreaMetres(hull) >= ZONE_MIN_AREA_SQ_METRES) {
+            L.polygon(padOutward(hull, centre, ZONE_PADDING_METRES), style).addTo(zoneLayer);
+          } else {
+            // One or two venues, or all of them along one road — there is
+            // no area to enclose, so mark the spot rather than draw a
+            // sliver that only looks like a mistake.
+            L.circle(centre, { ...style, radius: ZONE_FALLBACK_RADIUS_METRES }).addTo(zoneLayer);
+          }
+        }
+      }
+
+      if (!mapAreaLegendEl) return;
+      mapAreaLegendEl.textContent = "";
+      if (centres.size <= 1) return;
+      for (const area of Array.from(centres.keys()).sort()) {
+        const item = document.createElement("span");
+        const dot = document.createElement("i");
+        dot.className = "legend-dot legend-dot-area";
+        dot.style.background = areaColor(area);
+        item.append(dot, document.createTextNode(area));
+        mapAreaLegendEl.appendChild(item);
+      }
     }
 
     function buildPopup(venue, events) {
@@ -563,6 +754,7 @@
       }
 
       markerLayer.clearLayers();
+      renderZones(visible);
 
       const byVenue = new Map();
       let unplaced = 0;
@@ -582,7 +774,7 @@
         const openCount = events.filter((ev) => badgeInfo(ev).open).length;
 
         const marker = L.marker([lat, lng], {
-          icon: venueIcon(events.length, openCount),
+          icon: venueIcon(events.length, openCount, events[0].area),
           // Venues with something open sit above the ones without, so an
           // open pin is never hidden under a full one.
           zIndexOffset: openCount > 0 ? 1000 : 0,
@@ -657,6 +849,7 @@
     // "the map is another view of this data", not a second query.
     function visibleEvents() {
       const keyword = keywordFilterEl.value.trim().toLowerCase();
+      const area = areaFilterEl ? areaFilterEl.value : "";
       const location = locationFilterEl.value;
       const openOnly = openOnlyFilterEl.checked;
 
@@ -666,6 +859,7 @@
 
       return upcoming.filter((ev) => {
         if (activeActivity !== "all" && ev.activity_type !== activeActivity) return false;
+        if (area && ev.area !== area) return false;
         if (location && ev.location !== location) return false;
         if (keyword && !ev.event_name.toLowerCase().includes(keyword)) return false;
         if (favoritesOnly && !ev.is_favorited) return false;
@@ -710,6 +904,7 @@
 
     function render() {
       const keyword = keywordFilterEl.value.trim().toLowerCase();
+      const area = areaFilterEl ? areaFilterEl.value : "";
       const location = locationFilterEl.value;
       const openOnly = openOnlyFilterEl.checked;
       const favoritesOnly = favoritesOnlyFilterEl ? favoritesOnlyFilterEl.checked : false;
@@ -724,7 +919,12 @@
       emptyStateEl.hidden = renderedAny;
       if (!renderedAny) {
         const anyFilterActive =
-          activeActivity !== "all" || !!location || !!keyword || openOnly || favoritesOnly;
+          activeActivity !== "all" ||
+          !!area ||
+          !!location ||
+          !!keyword ||
+          openOnly ||
+          favoritesOnly;
         const textEl = document.getElementById("empty-state-text");
         const clearBtn = document.getElementById("clear-filters-btn");
         if (textEl) {
@@ -739,8 +939,52 @@
       }
     }
 
+    // Every venue the page was served with, so the location dropdown can be
+    // narrowed to one area and then widened again without a round trip.
+    const allLocationOptions = Array.from(locationFilterEl.options).map((o) => ({
+      value: o.value,
+      label: o.textContent,
+    }));
+
+    // Which area each venue is in, learned from the events themselves.
+    function venueAreas() {
+      const map = new Map();
+      for (const ev of allEvents) {
+        if (ev.location && ev.area && !map.has(ev.location)) map.set(ev.location, ev.area);
+      }
+      return map;
+    }
+
+    // Keep the location list to the chosen area. Without this the two
+    // filters can be set to contradict each other — "Coquitlam" plus a Port
+    // Moody pool — and the page goes blank with no hint why.
+    function syncLocationOptions() {
+      if (!areaFilterEl) return;
+      const area = areaFilterEl.value;
+      const areas = venueAreas();
+      const previous = locationFilterEl.value;
+
+      locationFilterEl.textContent = "";
+      for (const option of allLocationOptions) {
+        if (area && option.value && areas.get(option.value) !== area) continue;
+        const el = document.createElement("option");
+        el.value = option.value;
+        el.textContent = option.label;
+        locationFilterEl.appendChild(el);
+      }
+      // Drop a venue that the new area doesn't contain, rather than leaving
+      // a selection the dropdown no longer offers.
+      locationFilterEl.value = Array.from(locationFilterEl.options).some(
+        (o) => o.value === previous
+      )
+        ? previous
+        : "";
+    }
+
     function clearAllFilters() {
       selectActivityChip("all");
+      if (areaFilterEl) areaFilterEl.value = "";
+      syncLocationOptions();
       locationFilterEl.value = "";
       keywordFilterEl.value = "";
       openOnlyFilterEl.checked = false;
@@ -761,6 +1005,16 @@
       selectActivityChip(btn.dataset.activity);
       render();
     });
+
+    if (areaFilterEl) {
+      areaFilterEl.addEventListener("change", () => {
+        syncLocationOptions();
+        // Picking an area is a request to look somewhere else, so the map
+        // reframes on it rather than holding the previous area's view.
+        lastFitKey = null;
+        render();
+      });
+    }
 
     locationFilterEl.addEventListener("change", render);
     keywordFilterEl.addEventListener("input", render);
@@ -848,6 +1102,10 @@
 
     function applyPreferences(prefs) {
       selectActivityChip(prefs.activity || "all");
+      if (areaFilterEl) areaFilterEl.value = prefs.area || "";
+      // Narrow the venue list before restoring the saved venue, or the
+      // saved value would be dropped as "not in this area" on every load.
+      syncLocationOptions();
       locationFilterEl.value = prefs.location || "";
       openOnlyFilterEl.checked = !!prefs.openOnly;
     }
@@ -856,8 +1114,91 @@
     // kept out of applyPreferences (which only drives the visible filters).
     let emailAlertsEnabled = false;
 
-    function openPreferencesModal() {
+    // --- Working out which area someone is in --------------------------
+    //
+    // Asked once, on the first visit only, to preselect the nearest area in
+    // the preferences modal. Three rules keep that from becoming a nuisance:
+    // the answer is never asked for twice (a refusal is remembered as
+    // firmly as a permission), nothing waits on it for more than a few
+    // seconds, and every failure path just leaves "All areas" selected.
+    // Nothing here is sent anywhere — the coordinates are compared against
+    // the venues already on the page and then discarded.
+    const GEO_ASKED_KEY = "activityDashboardLocationAsked";
+    const GEO_TIMEOUT_MS = 7000;
+
+    function locationAlreadyAsked() {
+      try {
+        return localStorage.getItem(GEO_ASKED_KEY) === "1";
+      } catch (err) {
+        // No storage means no memory of asking, and asking on every visit
+        // would be worse than never asking.
+        return true;
+      }
+    }
+
+    function rememberLocationAsked() {
+      try {
+        localStorage.setItem(GEO_ASKED_KEY, "1");
+      } catch (err) {
+        /* best-effort */
+      }
+    }
+
+    // The area of the single closest venue — not the closest area centre.
+    // Centres mislead badly here: Port Moody's three venues average out to a
+    // point 2.8 km west of Coquitlam's centre, so standing at Port Moody
+    // city hall, "nearest centre" answers Coquitlam. Nearest venue answers
+    // the question people actually mean — where could I go from here.
+    function nearestArea(position) {
+      const here = [position.coords.latitude, position.coords.longitude];
+      let best = null;
+      let bestDistance = Infinity;
+      for (const ev of allEvents) {
+        if (!ev.area || typeof ev.lat !== "number" || typeof ev.lng !== "number") continue;
+        const distance = distanceMetres(here, [ev.lat, ev.lng]);
+        if (distance < bestDistance) {
+          bestDistance = distance;
+          best = ev.area;
+        }
+      }
+      return best;
+    }
+
+    // Resolves to an area name, or to null for every "we don't know" case:
+    // no support, already asked, refused, timed out, or too far away for an
+    // area to be a sensible guess.
+    function detectNearestArea() {
+      if (locationAlreadyAsked() || !navigator.geolocation) return Promise.resolve(null);
+      rememberLocationAsked();
+      return new Promise((resolve) => {
+        let settled = false;
+        const finish = (value) => {
+          if (!settled) {
+            settled = true;
+            resolve(value);
+          }
+        };
+        // navigator.geolocation can hang indefinitely on some browsers even
+        // with its own timeout set, and the modal must not wait on it.
+        setTimeout(() => finish(null), GEO_TIMEOUT_MS);
+        navigator.geolocation.getCurrentPosition(
+          (position) => finish(nearestArea(position)),
+          () => finish(null),
+          { timeout: GEO_TIMEOUT_MS, maximumAge: 600000, enableHighAccuracy: false }
+        );
+      });
+    }
+
+    // suggestedArea, when given, preselects an area the filters are not set
+    // to yet — the first-visit location guess. It is only ever a suggestion:
+    // it reaches the filters if this dialog is saved, and is forgotten if it
+    // is skipped or dismissed.
+    function openPreferencesModal(suggestedArea) {
       setRadioGroupValue("pref-activity", activeActivity);
+      setRadioGroupValue(
+        "pref-area",
+        suggestedArea || (areaFilterEl ? areaFilterEl.value : "")
+      );
       setRadioGroupValue("pref-location", locationFilterEl.value);
       prefOpenOnlyEl.checked = openOnlyFilterEl.checked;
       if (prefEmailAlertsEl) prefEmailAlertsEl.checked = emailAlertsEnabled;
@@ -1057,7 +1398,10 @@
         });
     }
 
-    preferencesBtn.addEventListener("click", openPreferencesModal);
+    // Wrapped, not passed directly: a listener is handed the click event,
+    // which would arrive as openPreferencesModal's suggestedArea and reset
+    // the area radio to "All areas" every time the dialog was reopened.
+    preferencesBtn.addEventListener("click", () => openPreferencesModal());
 
     prefSkipBtn.addEventListener("click", () => {
       try {
@@ -1075,6 +1419,7 @@
       try {
         const prefs = {
           activity: getRadioGroupValue("pref-activity"),
+          area: getRadioGroupValue("pref-area"),
           location: getRadioGroupValue("pref-location"),
           openOnly: prefOpenOnlyEl.checked,
         };
@@ -1112,11 +1457,19 @@
         // A stored record holding only the email-alert flag means the filter
         // preferences were never set, so still prompt for those.
         const hasFilterPrefs =
-          storedPrefs && ("activity" in storedPrefs || "location" in storedPrefs);
+          storedPrefs &&
+          ("activity" in storedPrefs ||
+            "location" in storedPrefs ||
+            "area" in storedPrefs);
         if (hasFilterPrefs && !storedPrefs.skipped) {
           applyPreferences(storedPrefs);
         } else if (!storedPrefs || !hasFilterPrefs) {
-          if (!(storedPrefs && storedPrefs.skipped)) openPreferencesModal();
+          if (!(storedPrefs && storedPrefs.skipped)) {
+            // First visit. Offer the nearest area as the starting point,
+            // but open the dialog either way — a refused or slow location
+            // prompt must not hold the page hostage.
+            openPreferencesModal(await detectNearestArea());
+          }
         }
       } catch (err) {
         console.error("Failed to load preferences:", err);

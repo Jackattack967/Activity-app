@@ -984,9 +984,14 @@ footer a { color: var(--text-muted); }
   font-weight: 700;
   color: white;
   background: var(--text-muted);
-  border: 2.5px solid var(--surface);
-  /* Lifts the pin off the map rather than letting it sit flat in it. */
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28);
+  /* The ring says which area the venue is in; the fill says whether
+     anything is open there. Two facts, two channels, neither overwriting
+     the other. Falls back to a plain ring when no area colour is set. */
+  border: 2.5px solid var(--area-color, var(--surface));
+  /* Lifts the pin off the map rather than letting it sit flat in it. The
+     first shadow is a hairline of page background outside the coloured
+     ring, so the ring stays legible over a dark tile or a green park. */
+  box-shadow: 0 0 0 1.5px var(--surface), 0 2px 6px rgba(0, 0, 0, 0.28);
   transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 
@@ -998,7 +1003,7 @@ footer a { color: var(--text-muted); }
 
 .venue-marker:hover {
   transform: scale(1.12);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.34);
+  box-shadow: 0 0 0 1.5px var(--surface), 0 4px 12px rgba(0, 0, 0, 0.34);
 }
 
 .leaflet-marker-icon:focus-visible .venue-marker {
@@ -1074,6 +1079,19 @@ footer a { color: var(--text-muted); }
 
 .legend-dot-open {
   background: var(--green);
+}
+
+/* The area swatches are a second row under the open/full key, so the two
+   legends don't compete for the same line on a narrow screen. */
+.map-legend-areas {
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.9rem;
+}
+
+.legend-dot-area {
+  /* Colour is set per swatch from the area palette in app.js. */
+  border-radius: 50%;
 }
 
 @media (max-width: 560px) {

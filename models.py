@@ -32,6 +32,10 @@ _ADDITIVE_MIGRATIONS = (
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMP",
     "UPDATE users SET last_seen_at = created_at WHERE last_seen_at IS NULL",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS deletion_warned_at TIMESTAMP",
+    # The dashboard covers more than one city now, so a saved filter
+    # includes which area to show. Empty means all of them.
+    "ALTER TABLE preferences ADD COLUMN IF NOT EXISTS "
+    "area VARCHAR(100) NOT NULL DEFAULT ''",
     """
     DO $$ BEGIN
       IF NOT EXISTS (
@@ -95,6 +99,7 @@ class Preference(db.Model):
     )
     activity = db.Column(db.String(50), default="all")
     location = db.Column(db.String(255), default="")
+    area = db.Column(db.String(100), default="")
     open_only = db.Column(db.Boolean, default=False)
 
 

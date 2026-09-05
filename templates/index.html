@@ -102,6 +102,12 @@
   </div>
 
   <div class="filter-group">
+    <select id="area-filter" aria-label="Area">
+      <option value="">All areas</option>
+      {% for area in areas %}
+      <option value="{{ area }}">{{ area }}</option>
+      {% endfor %}
+    </select>
     <select id="location-filter">
       <option value="">All locations</option>
       {% for loc in locations %}
@@ -151,6 +157,9 @@
         <span><i class="legend-dot legend-dot-open"></i> Has open spots</span>
         <span><i class="legend-dot"></i> Currently full</span>
       </div>
+      <!-- One swatch per area, filled in by app.js since which areas have
+           sessions changes with the filters. -->
+      <div class="map-legend map-legend-areas" id="map-area-legend"></div>
     </div>
   </div>
 </main>
@@ -168,6 +177,14 @@
       <label><input type="radio" name="pref-activity" value="all" checked> All activities</label>
       {% for a in activity_types %}
       <label><input type="radio" name="pref-activity" value="{{ a }}"> {{ a }}</label>
+      {% endfor %}
+    </fieldset>
+
+    <fieldset class="modal-fieldset">
+      <legend>Area</legend>
+      <label><input type="radio" name="pref-area" value="" checked> All areas</label>
+      {% for area in areas %}
+      <label><input type="radio" name="pref-area" value="{{ area }}"> {{ area }}</label>
       {% endfor %}
     </fieldset>
 
@@ -206,7 +223,7 @@
 </div>
 
 <footer>
-  <p>Sources: {{ source_names|join(', ') }} (PerfectMind public schedule widgets) &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>
+  <p>Sources: {{ source_names|join(', ') }} (each city's public booking portal) &middot; showing the next {{ window_days }} days &middot; unofficial, for personal convenience only.</p>
   <p><a href="{{ url_for('privacy') }}">Privacy policy</a></p>
   {% if accounts_enabled %}
   <p id="watch-status" class="watch-status">Checking alert watcher…</p>
