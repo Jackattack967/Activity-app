@@ -17,8 +17,75 @@
       if (e.target === preferencesModal) closePreferencesModal();
     });
   }
+
+  // The welcome card, wired up in the same place and for the same reason.
+  const welcomeModal = document.getElementById("welcome-modal");
+  const welcomeCloseBtn = document.getElementById("welcome-close-btn");
+  const welcomeStartBtn = document.getElementById("welcome-start-btn");
+  const WELCOME_SEEN_KEY = "activityDashboardWelcomeSeen";
+
+  // What to do once the card is out of the way. On a first visit that is
+  // the preferences dialog, and every way of closing runs it — dismissing
+  // an explanation means "I don't need this read to me", not "skip my
+  // setup". The preferences dialog has its own Skip for now, which is the
+  // control that actually means leave me alone, and the one that records
+  // it. Reopened from the menu there is no continuation, so closing just
+  // closes.
+  let afterWelcome = null;
+
+  function welcomeAlreadySeen() {
+    try {
+      return localStorage.getItem(WELCOME_SEEN_KEY) === "1";
+    } catch (err) {
+      // Private browsing can throw on read. Treat it as "not seen": showing
+      // the card twice is a smaller failure than never showing it.
+      return false;
+    }
+  }
+
+  function closeWelcomeModal() {
+    if (welcomeModal) welcomeModal.hidden = true;
+    try {
+      localStorage.setItem(WELCOME_SEEN_KEY, "1");
+    } catch (err) {
+      /* best-effort: it will be offered again next visit */
+    }
+    const next = afterWelcome;
+    afterWelcome = null;
+    if (next) next();
+  }
+
+  function openWelcomeModal(onClose) {
+    if (!welcomeModal) {
+      if (onClose) onClose();
+      return;
+    }
+    afterWelcome = onClose || null;
+    welcomeModal.hidden = false;
+  }
+
+  if (welcomeCloseBtn) welcomeCloseBtn.addEventListener("click", closeWelcomeModal);
+  if (welcomeStartBtn) welcomeStartBtn.addEventListener("click", closeWelcomeModal);
+  if (welcomeModal) {
+    welcomeModal.addEventListener("click", (e) => {
+      if (e.target === welcomeModal) closeWelcomeModal();
+    });
+  }
+
+  const howItWorksBtn = document.getElementById("how-it-works-btn");
+  if (howItWorksBtn) {
+    howItWorksBtn.addEventListener("click", () => {
+      closeMenu();
+      openWelcomeModal();
+    });
+  }
+
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && preferencesModal && !preferencesModal.hidden) {
+    if (e.key !== "Escape") return;
+    // Only ever one is open, but close the welcome first if both somehow are.
+    if (welcomeModal && !welcomeModal.hidden) {
+      closeWelcomeModal();
+    } else if (preferencesModal && !preferencesModal.hidden) {
       closePreferencesModal();
     }
   });
@@ -1768,10 +1835,20 @@
           applyPreferences(storedPrefs);
         } else if (!storedPrefs || !hasFilterPrefs) {
           if (!(storedPrefs && storedPrefs.skipped)) {
-            // First visit. Offer the nearest area as the starting point,
-            // but open the dialog either way — a refused or slow location
-            // prompt must not hold the page hostage.
-            openPreferencesModal(await detectNearestArea());
+            // First visit. Explain the app, then ask the two setup
+            // questions. The location lookup is started now rather than
+            // awaited first, so it resolves while the card is being read
+            // and the dialog behind it opens with the answer already in
+            // hand. Either way the dialog opens — a refused or slow
+            // location prompt must not hold the page hostage.
+            const nearest = detectNearestArea();
+            if (welcomeAlreadySeen()) {
+              openPreferencesModal(await nearest);
+            } else {
+              openWelcomeModal(async () => {
+                openPreferencesModal(await nearest);
+              });
+            }
           }
         }
       } catch (err) {

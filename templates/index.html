@@ -65,6 +65,10 @@
 
         <span id="last-updated" class="menu-status" data-fetched-at="{{ fetched_at }}">Loading…</span>
 
+        <button id="how-it-works-btn" type="button" class="menu-item" role="menuitem">
+          ? How this works
+        </button>
+
         <button id="preferences-btn" type="button" class="menu-item" role="menuitem">
           ⚙ Preferences
         </button>
@@ -239,6 +243,67 @@
       <a href="{{ url_for('privacy') }}">Privacy</a>
     </div>
     {% endif %}
+  </div>
+</div>
+
+{# Shown once, before the preferences dialog, and reopenable from the menu.
+   Nothing on a schedule tells you the page can watch it for you, filter it
+   or map it — so the first visit says so plainly, and then asks the two
+   setup questions. #}
+<div class="modal-overlay" id="welcome-modal" hidden>
+  <div class="modal-card welcome-card" role="dialog" aria-labelledby="welcome-title">
+    <div class="modal-header">
+      <h2 id="welcome-title">How this works</h2>
+      <button id="welcome-close-btn" type="button" class="modal-close" aria-label="Close">✕</button>
+    </div>
+    <p class="modal-sub">
+      Every drop-in session from {{ source_names|length }} cities' booking
+      systems, on one page — skating, swimming, sports, fitness and golf for
+      the next {{ window_days }} days.
+    </p>
+
+    <ul class="welcome-list">
+      {% if accounts_enabled %}
+      <li>
+        <span class="welcome-icon welcome-icon-star" aria-hidden="true">★</span>
+        <div>
+          <strong>Star anything to watch it.</strong>
+          Good sessions fill up. Star one and you'll be told the moment a
+          place opens — by email, or a notification on your phone. Watch every
+          week of an activity, or just the one date you care about.
+        </div>
+      </li>
+      {% endif %}
+      <li>
+        <span class="welcome-icon" aria-hidden="true">≡</span>
+        <div>
+          <strong>Narrow it down.</strong>
+          Filter by activity, by area, or by a single venue, and tick
+          <em>Hide full sessions</em> to drop the ones with no space left.
+        </div>
+      </li>
+      <li>
+        <span class="welcome-icon" aria-hidden="true">◉</span>
+        <div>
+          <strong>See where things are.</strong>
+          Switch to <em>Map</em> for every venue at once, coloured by area,
+          with what's on at each one.
+        </div>
+      </li>
+      <li>
+        <span class="welcome-icon" aria-hidden="true">↻</span>
+        <div>
+          <strong>Straight from the cities.</strong>
+          Times and spaces are read from each city's own booking system, so
+          they're current — and <em>Register</em> takes you there to book.
+          This is an unofficial project, not run by any city.
+        </div>
+      </li>
+    </ul>
+
+    <div class="modal-actions">
+      <button id="welcome-start-btn" type="button" class="btn-primary">Got it</button>
+    </div>
   </div>
 </div>
 
