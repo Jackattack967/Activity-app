@@ -229,6 +229,36 @@ waits on it for more than seven seconds, and every failure just leaves "All
 areas" selected. The coordinates are compared against the venues already on
 the page and then discarded; they are never sent anywhere.
 
+## Dark mode
+
+Every colour on the site is a CSS custom property, and the two themes differ
+only in what those tokens resolve to — no component restyles itself per
+theme. There are three states, not two: no `data-theme` attribute at all
+(follow the operating system, the default), `data-theme="light"`, and
+`data-theme="dark"`. The media query is written as
+`:root:not([data-theme="light"])` so an explicit light choice still beats a
+dark OS.
+
+**Menu → Theme** cycles Auto → Light → Dark and remembers the choice. A
+small inline script in `templates/_theme.html` applies it before the first
+paint — without it, someone who chose dark gets a white flash on every
+navigation. That partial is included by all four page templates, which are
+standalone documents with no shared base, and it also sets `theme-color`
+(the browser's own chrome on a phone), which the media-query form of that
+tag cannot do once a manual override exists.
+
+A few tokens are deliberately not symmetrical. `--green`, `--red` and
+`--text-muted` are read as text, so they lighten on a dark ground — but the
+same hues also fill the danger button and the map markers, which carry white
+text and must stay dark. Those fills are separate `-solid` tokens.
+Collapsing the two is how a dark mode ends up with white-on-pink buttons.
+
+OpenStreetMap only serves a light basemap, so dark mode inverts it in the
+browser (`--tile-filter`) rather than fetching different tiles. Leaflet's own
+controls — zoom buttons, scale bar, attribution — are restyled with
+`.leaflet-container`-prefixed selectors, because Leaflet's rules are more
+specific than a bare class and quietly win otherwise.
+
 ## Feedback
 
 The Feedback button in the header emails what someone writes to

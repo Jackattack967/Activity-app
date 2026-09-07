@@ -72,6 +72,67 @@
     });
   }
 
+  // Theme. Wired here beside the other escape hatches, before runApp(), so
+  // it keeps working even if something later in this file throws: being
+  // stuck in a theme you can't read with no way out is exactly the failure
+  // that should not depend on the rest of the app loading.
+  //
+  // Three states, not two. "Auto" is the default and follows the operating
+  // system; the two explicit choices exist because someone's phone being in
+  // dark mode at night doesn't mean they want this page dark.
+  const THEME_KEY = "activityDashboardTheme";
+  const THEME_ORDER = ["auto", "light", "dark"];
+  const THEME_LABELS = { auto: "Theme: Auto", light: "Theme: Light", dark: "Theme: Dark" };
+  const themeBtn = document.getElementById("theme-btn");
+
+  function storedTheme() {
+    try {
+      const t = localStorage.getItem(THEME_KEY);
+      return t === "light" || t === "dark" ? t : "auto";
+    } catch (err) {
+      return "auto";
+    }
+  }
+
+  function applyTheme(mode) {
+    const root = document.documentElement;
+    // Removing the attribute is what hands control back to the OS — an
+    // "auto" value would just be an unknown theme the CSS never matches.
+    if (mode === "auto") root.removeAttribute("data-theme");
+    else root.setAttribute("data-theme", mode);
+
+    try {
+      if (mode === "auto") localStorage.removeItem(THEME_KEY);
+      else localStorage.setItem(THEME_KEY, mode);
+    } catch (err) {
+      /* best-effort: the choice just won't survive a reload */
+    }
+
+    const dark =
+      mode === "dark" ||
+      (mode === "auto" &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", dark ? "#14161a" : "#2563eb");
+
+    if (themeBtn) {
+      themeBtn.textContent = "◐ " + THEME_LABELS[mode];
+      themeBtn.setAttribute("aria-label", THEME_LABELS[mode] + ". Activate to change.");
+    }
+  }
+
+  if (themeBtn) {
+    // The inline script in the head already set the attribute; this only
+    // brings the button's label into line with it.
+    applyTheme(storedTheme());
+    themeBtn.addEventListener("click", () => {
+      const next =
+        THEME_ORDER[(THEME_ORDER.indexOf(storedTheme()) + 1) % THEME_ORDER.length];
+      applyTheme(next);
+    });
+  }
+
   const howItWorksBtn = document.getElementById("how-it-works-btn");
   if (howItWorksBtn) {
     howItWorksBtn.addEventListener("click", () => {
@@ -115,7 +176,14 @@
     // you'd never see if the menu closed out from under it.
     menuPanel.addEventListener("click", (e) => {
       const item = e.target.closest(".menu-item");
-      const reportsInPlace = item && (item.id === "alerts-btn" || item.id === "email-alerts-btn");
+      const reportsInPlace =
+        item &&
+        (item.id === "alerts-btn" ||
+          item.id === "email-alerts-btn" ||
+          // Cycles Auto -> Light -> Dark and says so in its label; closing
+          // the menu on each press would hide the answer and make getting
+          // to the third state a three-menu job.
+          item.id === "theme-btn");
       if (item && !reportsInPlace) closeMenu();
       else e.stopPropagation();
     });

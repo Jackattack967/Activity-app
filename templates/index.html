@@ -15,7 +15,7 @@
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 
 <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
-<meta name="theme-color" content="#2563eb">
+{% include '_theme.html' %}
 <link rel="icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -64,6 +64,10 @@
         {% endif %}
 
         <span id="last-updated" class="menu-status" data-fetched-at="{{ fetched_at }}">Loading…</span>
+
+        <button id="theme-btn" type="button" class="menu-item" role="menuitem">
+          ◐ Theme: Auto
+        </button>
 
         <button id="how-it-works-btn" type="button" class="menu-item" role="menuitem">
           ? How this works

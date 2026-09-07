@@ -1,0 +1,36 @@
+{# Theme bootstrap, included by every page.
+
+   These are four standalone documents with no shared base, so this partial
+   exists rather than the same six lines copied four times.
+
+   The script is inline and synchronous on purpose. It has to run before the
+   first paint, or someone who chose dark gets a white flash on every
+   navigation; an external file would be fetched too late. It only reads a
+   saved *override* — with nothing saved, the CSS follows the operating
+   system on its own and this does nothing.
+
+   It also sets theme-color, which tints the browser's own chrome on a
+   phone. That can't be left to the media-query form of the tag, because a
+   manual override has to win over the OS preference there too. #}
+<meta name="theme-color" content="#2563eb">
+<script>
+  (function () {
+    var root = document.documentElement;
+    var saved = null;
+    try {
+      saved = localStorage.getItem("activityDashboardTheme");
+    } catch (err) {
+      /* Private browsing can throw on read. The OS preference still applies. */
+    }
+    if (saved === "dark" || saved === "light") {
+      root.setAttribute("data-theme", saved);
+    }
+    var dark =
+      saved === "dark" ||
+      (saved !== "light" &&
+        window.matchMedia &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute("content", dark ? "#14161a" : "#2563eb");
+  })();
+</script>

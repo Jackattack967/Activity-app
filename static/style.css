@@ -1,16 +1,144 @@
+/* Every colour on the site is a token, and the two themes differ only in
+   what the tokens resolve to — no component re-styles itself per theme.
+   Three blocks, because the viewer has three states and not two: no
+   attribute at all (follow the OS, the default), data-theme="light", and
+   data-theme="dark". The media query is guarded so an explicit light
+   choice still beats a dark OS.
+
+   A few colours are deliberately NOT symmetrical. --green, --red and
+   --text-muted are read as text on the page, so they lighten on a dark
+   ground; but the same hues also fill the danger button and the map
+   markers, which carry white text and must therefore stay dark in both
+   themes. Those fills are separate -solid tokens. Collapsing the two is
+   how a dark mode ends up with white-on-pink buttons. */
 :root {
   --bg: #f5f6f8;
   --surface: #ffffff;
   --border: #e2e5ea;
   --text: #1c1f26;
   --text-muted: #6b7280;
+
   --brand: #2563eb;
   --brand-dark: #1d4ed8;
+  /* Brand as *text* on the page ground, which needs more lift on dark
+     than the same blue used as a button fill. */
+  --brand-ink: #2563eb;
+
   --green: #15803d;
   --green-bg: #dcfce7;
   --red: #b91c1c;
   --red-bg: #fee2e2;
   --gray-bg: #eef0f3;
+
+  /* Fills that carry white text, in both themes. */
+  --green-solid: #15803d;
+  --red-solid: #b91c1c;
+  --marker-bg: #6b7280;
+  --on-solid: #ffffff;
+
+  --star: #f5a623;
+  --star-bg: #fff6e5;
+  --hint-bg: #fff8e8;
+  --hint-border: #f4e3bd;
+  --warn: #a4610a;
+  --warn-bg: #fdf1dc;
+  --tag-bg: #eaf0fe;
+
+  --overlay: rgba(0, 0, 0, 0.45);
+  --attrib-bg: rgba(255, 255, 255, 0.82);
+  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.14);
+  --shadow-map: 0 6px 20px rgba(0, 0, 0, 0.16);
+
+  /* OpenStreetMap only serves a light basemap, so dark mode inverts it in
+     the browser rather than fetching different tiles. */
+  --tile-filter: saturate(0.68) brightness(1.04) contrast(0.96);
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161a;
+    --surface: #1c1f26;
+    --border: #2e333c;
+    --text: #e7eaef;
+    --text-muted: #9aa1ad;
+
+    --brand: #2f6fe4;
+    --brand-dark: #4a86f0;
+    --brand-ink: #7ea9ff;
+
+    --green: #5fd493;
+    --green-bg: #12321e;
+    --red: #f6a3a3;
+    --red-bg: #3a1b1b;
+    --gray-bg: #23272f;
+
+    --green-solid: #1a7f4b;
+    --red-solid: #b3403c;
+    --marker-bg: #565e6b;
+    --on-solid: #ffffff;
+
+    --star: #eab34a;
+    --star-bg: #332913;
+    --hint-bg: #282111;
+    --hint-border: #4a3d1f;
+    --warn: #f0c078;
+    --warn-bg: #35270f;
+    --tag-bg: #1e2a44;
+
+    --overlay: rgba(0, 0, 0, 0.66);
+    --attrib-bg: rgba(20, 22, 26, 0.85);
+    --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.5);
+    --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.55);
+    --shadow-map: 0 6px 20px rgba(0, 0, 0, 0.5);
+
+    --tile-filter: invert(1) hue-rotate(180deg) brightness(0.96) contrast(0.94) saturate(0.55);
+
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #14161a;
+  --surface: #1c1f26;
+  --border: #2e333c;
+  --text: #e7eaef;
+  --text-muted: #9aa1ad;
+
+  --brand: #2f6fe4;
+  --brand-dark: #4a86f0;
+  --brand-ink: #7ea9ff;
+
+  --green: #5fd493;
+  --green-bg: #12321e;
+  --red: #f6a3a3;
+  --red-bg: #3a1b1b;
+  --gray-bg: #23272f;
+
+  --green-solid: #1a7f4b;
+  --red-solid: #b3403c;
+  --marker-bg: #565e6b;
+  --on-solid: #ffffff;
+
+  --star: #eab34a;
+  --star-bg: #332913;
+  --hint-bg: #282111;
+  --hint-border: #4a3d1f;
+  --warn: #f0c078;
+  --warn-bg: #35270f;
+  --tag-bg: #1e2a44;
+
+  --overlay: rgba(0, 0, 0, 0.66);
+  --attrib-bg: rgba(20, 22, 26, 0.85);
+  --shadow-menu: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.55);
+  --shadow-map: 0 6px 20px rgba(0, 0, 0, 0.5);
+
+  --tile-filter: invert(1) hue-rotate(180deg) brightness(0.96) contrast(0.94) saturate(0.55);
+
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -47,7 +175,7 @@ body {
 }
 
 .login-link {
-  color: var(--brand);
+  color: var(--brand-ink);
   text-decoration: none;
   font-weight: 600;
   white-space: nowrap;
@@ -109,7 +237,7 @@ body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-menu);
   padding: 0.4rem;
   display: flex;
   flex-direction: column;
@@ -174,7 +302,7 @@ body {
 
 #refresh-btn {
   background: var(--brand);
-  color: white;
+  color: var(--on-solid);
   border: none;
   padding: 0.45rem 0.9rem;
   border-radius: 6px;
@@ -262,7 +390,7 @@ body {
 .chip.active {
   background: var(--brand);
   border-color: var(--brand);
-  color: white;
+  color: var(--on-solid);
 }
 
 #location-filter, #keyword-filter {
@@ -313,12 +441,12 @@ main {
   padding: 0.6rem 0.85rem;
   font-size: 0.88rem;
   color: var(--text);
-  background: #fff8e8;
-  border: 1px solid #f4e3bd;
+  background: var(--hint-bg);
+  border: 1px solid var(--hint-border);
   border-radius: 10px;
 }
 .star-hint-icon {
-  color: #f5a623;
+  color: var(--star);
   font-size: 1.35rem;
   line-height: 1;
   flex: none;
@@ -330,7 +458,7 @@ main {
 }
 .event-details summary {
   cursor: pointer;
-  color: var(--brand);
+  color: var(--brand-ink);
   font-weight: 600;
   width: fit-content;
 }
@@ -412,16 +540,16 @@ main {
 }
 .favorite-btn:hover,
 .favorite-btn:focus-visible {
-  color: #f5a623;
-  background: #fff6e5;
+  color: var(--star);
+  background: var(--star-bg);
 }
 .favorite-btn.favorited {
-  color: #f5a623;
+  color: var(--star);
 }
 /* A one-off watch is distinguished from a standing one, so the list shows
    at a glance which stars will keep working next week. */
 .favorite-btn.favorited-once {
-  color: var(--brand);
+  color: var(--brand-ink);
 }
 
 .event-title-row {
@@ -437,7 +565,7 @@ main {
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  box-shadow: var(--shadow-pop);
   padding: 0.3rem;
   display: flex;
   flex-direction: column;
@@ -474,23 +602,23 @@ main {
 /* A cancelled session stays on the schedule — someone who saw it yesterday
    needs to be told it is off — but it must not read as available. */
 .badge-cancelled {
-  background: #fdf1dc;
-  color: #a4610a;
+  background: var(--warn-bg);
+  color: var(--warn);
 }
 .event-card-cancelled {
   opacity: 0.75;
 }
 .event-card-cancelled .event-title-row h3 {
   text-decoration: line-through;
-  text-decoration-color: #a4610a;
+  text-decoration-color: var(--warn);
 }
 
 .activity-tag {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  color: var(--brand);
-  background: #eaf0fe;
+  color: var(--brand-ink);
+  background: var(--tag-bg);
   padding: 0.1rem 0.45rem;
   border-radius: 4px;
 }
@@ -523,7 +651,7 @@ main {
 .register-btn {
   display: inline-block;
   background: var(--brand);
-  color: white;
+  color: var(--on-solid);
   text-decoration: none;
   font-size: 0.78rem;
   font-weight: 600;
@@ -609,8 +737,8 @@ footer a { color: var(--text-muted); }
 }
 
 .btn-danger {
-  background: var(--red);
-  color: white;
+  background: var(--red-solid);
+  color: var(--on-solid);
   border: none;
   padding: 0.55rem 1rem;
   border-radius: 6px;
@@ -811,7 +939,7 @@ footer a { color: var(--text-muted); }
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.45);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -943,7 +1071,7 @@ footer a { color: var(--text-muted); }
 
 .feedback-field textarea:focus-visible,
 .feedback-field input:focus-visible {
-  outline: 2px solid var(--brand);
+  outline: 2px solid var(--brand-ink);
   outline-offset: 1px;
 }
 
@@ -999,7 +1127,7 @@ footer a { color: var(--text-muted); }
 
 .btn-primary {
   background: var(--brand);
-  color: white;
+  color: var(--on-solid);
 }
 .btn-primary:hover { background: var(--brand-dark); }
 
@@ -1033,7 +1161,7 @@ footer a { color: var(--text-muted); }
 
 .view-btn.active {
   background: var(--brand);
-  color: white;
+  color: var(--on-solid);
 }
 
 #map-view {
@@ -1158,7 +1286,7 @@ footer a { color: var(--text-muted); }
   justify-content: center;
   font-size: 0.85rem;
   font-weight: 700;
-  color: white;
+  color: var(--on-solid);
   background: var(--text-muted);
   /* The ring says which area the venue is in; the fill says whether
      anything is open there. Two facts, two channels, neither overwriting
@@ -1174,7 +1302,7 @@ footer a { color: var(--text-muted); }
 /* Green means something is actually bookable here — the same signal the
    badges use, so the map needs no separate vocabulary. */
 .venue-marker-open {
-  background: var(--green);
+  background: var(--green-solid);
 }
 
 .venue-marker:hover {
@@ -1183,7 +1311,7 @@ footer a { color: var(--text-muted); }
 }
 
 .leaflet-marker-icon:focus-visible .venue-marker {
-  outline: 3px solid var(--brand);
+  outline: 3px solid var(--brand-ink);
   outline-offset: 2px;
 }
 
@@ -1191,7 +1319,7 @@ footer a { color: var(--text-muted); }
    to match the cards. */
 .leaflet-popup-content-wrapper {
   border-radius: 10px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16);
+  box-shadow: var(--shadow-map);
 }
 
 .leaflet-popup-content {
@@ -1210,14 +1338,45 @@ footer a { color: var(--text-muted); }
   border-radius: 10px;
 }
 
-.leaflet-control-attribution {
+/* Leaflet's own rule is .leaflet-container .leaflet-control-attribution,
+   which outranks a single class — so the background here never applied in
+   either theme until the selector was raised to match. It matters more
+   than aesthetics: OpenStreetMap's tile usage policy requires the
+   attribution to stay legible, and Leaflet's default is dark text on a
+   white box, which on an inverted dark basemap is a white slab. */
+.leaflet-container .leaflet-control-attribution {
   font-size: 0.68rem;
-  background: rgba(255, 255, 255, 0.82);
+  background: var(--attrib-bg);
+  color: var(--text-muted);
+}
+.leaflet-container .leaflet-control-attribution a {
+  color: var(--brand-ink);
 }
 
-.leaflet-bar a {
+/* Leaflet ships these as white boxes with black glyphs. Left alone they
+   sit on the dark basemap as two bright slabs. Selectors are prefixed with
+   .leaflet-container to clear Leaflet's own .leaflet-touch .leaflet-bar
+   rules, which are more specific than a bare class. */
+.leaflet-container .leaflet-bar a {
+  background: var(--surface);
   color: var(--text);
   border-radius: 6px;
+  border-bottom-color: var(--border);
+}
+.leaflet-container .leaflet-bar a:hover,
+.leaflet-container .leaflet-bar a:focus {
+  background: var(--gray-bg);
+  color: var(--text);
+}
+.leaflet-container .leaflet-bar a.leaflet-disabled {
+  background: var(--gray-bg);
+  color: var(--text-muted);
+}
+
+.leaflet-container .leaflet-control-scale-line {
+  background: var(--attrib-bg);
+  color: var(--text-muted);
+  border-color: var(--border);
 }
 
 /* --- Map footer: count + legend ---------------------------------------- */
@@ -1293,7 +1452,7 @@ footer a { color: var(--text-muted); }
    external service and cannot be withdrawn. Tiles only: the filter is on
    the tile pane, so markers, popups and controls keep their full colour. */
 .leaflet-tile-pane {
-  filter: saturate(0.68) brightness(1.04) contrast(0.96);
+  filter: var(--tile-filter);
 }
 
 /* The signed-out star and its explainer. Same popover as the watch menu,
@@ -1306,8 +1465,8 @@ footer a { color: var(--text-muted); }
 }
 .favorite-btn-signed-out:hover,
 .favorite-btn-signed-out:focus-visible {
-  color: #f5a623;
-  background: #fff6e5;
+  color: var(--star);
+  background: var(--star-bg);
 }
 
 /* A fixed width, not a min-width: the blurb is a sentence, and letting it
@@ -1327,7 +1486,7 @@ footer a { color: var(--text-muted); }
   text-align: center;
   text-decoration: none;
   font-weight: 600;
-  color: #fff;
+  color: var(--on-solid);
   background: var(--brand);
   border-radius: 8px;
   padding: 0.5rem 0.75rem;
@@ -1393,8 +1552,8 @@ footer a { color: var(--text-muted); }
 /* The star is the one people have to be told about, so it is the one
    thing here wearing the colour it wears on a card. */
 .welcome-icon-star {
-  background: #fff6e5;
-  color: #f5a623;
+  background: var(--star-bg);
+  color: var(--star);
   font-size: 1.15rem;
 }
 
