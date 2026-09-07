@@ -816,6 +816,14 @@ footer a { color: var(--text-muted); }
     gap: 0.5rem;
   }
 
+  /* The desktop rule is `flex: 1 1 20rem`, where 20rem is a *width* basis
+     because that row runs horizontally. Turning the row into a column
+     turns the same 20rem into a height, which padded 320px of empty space
+     above the first session on every phone. Basis back to the content. */
+  .filter-row .filter-group-controls {
+    flex: 0 1 auto;
+  }
+
   /* Location and search share a row instead of stacking. Was written as
      .filter-group:last-child, which matched nothing — .view-toggle is the
      last child of .filters, not a .filter-group — so this never applied. */
