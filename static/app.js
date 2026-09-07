@@ -654,12 +654,22 @@
       [41.2, -141.5],
       [83.6, -52.1],
     ];
-    // A fence only means something while the map is smaller than the fence.
-    // Zoomed further out than this the whole country no longer fills the
-    // screen, so Leaflet has to show what lies beyond it and the limit
-    // stops doing anything. Zoom 4 is about where Canada still spans a
-    // desktop window.
-    const MAP_MIN_ZOOM = 4;
+    // How far out you may zoom is worked out from the fence itself rather
+    // than fixed, because no single number is right for every screen.
+    //
+    // Canada is enormously tall in Web Mercator: the projection stretches
+    // Ellesmere Island at 83 N far more than the border at 49 N, so it is
+    // the height and not the width that decides when the country fits. A
+    // fixed zoom 4 fitted the width of a desktop map but needed about
+    // 1300px of height, in a box that is 60vh — about a third of Canada,
+    // which is what "it only shows half of Canada" was. And because the
+    // map is a share of the viewport, the right answer differs between a
+    // phone and a laptop: any constant that frames one crops the other.
+    //
+    // Leaflet already knows how to answer this. getBoundsZoom is the zoom
+    // at which the given bounds fit the container at its current size, so
+    // the floor becomes exactly "zoomed out until all of Canada shows, and
+    // no further" on whatever screen it is.
     // Long popups are unusable on a phone; the rest stay in the list view.
     const MAX_POPUP_SESSIONS = 8;
 
@@ -705,6 +715,20 @@
     // re-fitted when that set changes.
     let lastFitKey = null;
 
+    // Lets the map zoom out until the whole fence is on screen, and no
+    // further. Measured, not assumed — see the note on MAP_MAX_BOUNDS.
+    function applyMinZoom() {
+      if (!map) return;
+      // A hidden container measures 0, and a fit computed against that is
+      // meaningless (Leaflet answers Infinity). The map starts hidden
+      // behind the list view, so this is the normal case, not an edge one.
+      const size = map.getSize();
+      if (!size.x || !size.y) return;
+      const fit = map.getBoundsZoom(MAP_MAX_BOUNDS);
+      if (!isFinite(fit)) return;
+      map.setMinZoom(fit);
+    }
+
     function ensureMap() {
       if (map) return true;
       if (!window.L) return false;
@@ -719,8 +743,11 @@
         // past the fence and then spring back, which reads as the map
         // fighting you; 1.0 simply stops it at the edge.
         maxBoundsViscosity: 1.0,
-        minZoom: MAP_MIN_ZOOM,
       }).setView(MAP_HOME, MAP_HOME_ZOOM);
+
+      // Recomputed whenever the container changes size — rotating a phone
+      // or dragging a window narrower changes which zoom fits.
+      map.on("resize", applyMinZoom);
 
       // OpenStreetMap's own tiles. Carto's Positron basemap was tried here
       // because it is muted and lets the markers dominate, but it now serves
@@ -735,6 +762,7 @@
       }).addTo(map);
 
       L.control.scale({ imperial: false }).addTo(map);
+      applyMinZoom();
 
       // Zones sit under the markers, so a pin is never obscured by the
       // tint of the area it belongs to.
@@ -1065,7 +1093,11 @@
         // measured while the container was hidden is wrong — grey tiles, and
         // a fitBounds that frames the wrong area. So re-measure first, then
         // draw. The container is already unhidden by this point.
-        if (ensureMap()) map.invalidateSize();
+        if (ensureMap()) {
+          map.invalidateSize();
+          // Only now does the container have a real size to measure.
+          applyMinZoom();
+        }
         renderMap(visibleEvents());
       }
     }

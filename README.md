@@ -201,8 +201,16 @@ crosses the river and swallows two of New Westminster's venues — the same
 problem hulls were introduced to solve.
 
 Panning is fenced to Canada (`MAP_MAX_BOUNDS` in `static/app.js`), and the
-map will not zoom out past the point where the country stops filling the
-screen. Every venue is in Metro Vancouver, so the rest of the world is
+map will not zoom out past the point where the whole country is on screen.
+That floor is not a constant: Leaflet's `getBoundsZoom` is asked what zoom
+fits the fence in the map box as it currently is, because the box is 60vh
+and the answer therefore depends on the screen. It also depends on the
+fence, so changing one changes the other automatically. Canada is very tall
+in Web Mercator — the projection stretches Ellesmere Island at 83°N far
+more than the border at 49°N — so it is the height, not the width, that
+decides: a hardcoded zoom 4 fitted the width of a desktop map but showed
+only about a third of the country's height. Every venue is in Metro
+Vancouver, so the rest of the world is
 somewhere this app has nothing to say about — and panning there still pulls
 tiles from OpenStreetMap's donated servers, whose [usage policy](https://operations.osmfoundation.org/policies/tiles/)
 asks that their capacity not be spent on demand nobody made. The fence is
