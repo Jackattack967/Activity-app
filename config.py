@@ -6,10 +6,10 @@
 #
 #   "perfectmind" — Coquitlam, Port Moody, New Westminster. Keys: base_url,
 #       org_path, widget_id, calendar_id. One entry per calendar.
-#   "activenet"   — Port Coquitlam. Keys: base_url, org_path, center_id,
-#       category_ids, location. One entry per *building*, because ActiveNet
-#       searches are filtered by building rather than by calendar. See
-#       scraper_activenet.py for why the building name is configured here.
+#   "activenet"   — Port Coquitlam, Burnaby. Keys: base_url, org_path,
+#       center_id, category_ids, location. One entry per *building*, because
+#       ActiveNet searches are filtered by building rather than by calendar.
+#       See scraper_activenet.py for why the building name is configured here.
 #
 # A source with no "platform" is treated as PerfectMind, which is what every
 # source was before the second platform existed.
@@ -220,6 +220,38 @@ SOURCES = [
             ("36", "Outlet", ()),
         )
     ),
+    # City of Burnaby, also on ActiveNet. Only its two golf courses are
+    # listed: golf is the one thing Burnaby publishes that no other city in
+    # this app does, and its pools and rinks are a separate, much larger
+    # addition that can be made in this file alone whenever it is wanted.
+    #
+    # These are lessons and clinics, not walk-on drop-ins. Booking an actual
+    # round at either course happens on a tee sheet the city runs on other
+    # software, which this app deliberately does not read — see README. What
+    # is here is every golf program Burnaby takes registrations for, each
+    # with its real remaining-spot count, which is what a watch needs to be
+    # able to tell you that a place has opened up.
+    *(
+        {
+            "source_name": "City of Burnaby",
+            "platform": "activenet",
+            "base_url": "https://anc.ca.apm.activecommunities.com",
+            "org_path": "burnaby",
+            "center_id": center_id,
+            "location": location,
+            # Every row at these two centres is already golf, so the category
+            # is belt-and-braces rather than a real narrowing. It is named
+            # anyway, so that if Burnaby ever books something else out of the
+            # clubhouse it does not silently arrive labelled "Golf".
+            "category_ids": ["55"],
+            "calendar_label": f"Golf — {location}",
+            "activity_type": "Golf",
+        }
+        for center_id, location in (
+            ("126", "Burnaby Mountain Golf Course"),
+            ("34", "Riverway Golf Course"),
+        )
+    ),
 ]
 
 # How many days ahead to pull the schedule for.
@@ -279,6 +311,13 @@ FACILITY_COORDS = {
     "Queensborough Community Centre": (49.185876, -122.943506),
     # Street-level only; Century House is mid-block on Eighth Street.
     "Century House": (49.201950, -122.912396),
+    # City of Burnaby
+    # Both points are the clubhouse, not the middle of the course. A golf
+    # course is a big polygon and its centroid lands out on the fairways;
+    # the clubhouse is where a lesson actually meets. For Riverway that is
+    # a ~400 m difference, which is the width of the course.
+    "Burnaby Mountain Golf Course": (49.264966, -122.942888),
+    "Riverway Golf Course": (49.200628, -122.990303),
     # Outdoor pools, mapped to their park's centre rather than the pool
     # itself — OSM has the park but not the pool building.
     "Hume Park": (49.235173, -122.890505),
@@ -300,6 +339,7 @@ AREAS = (
     {"name": "Port Coquitlam", "cities": ("City of Port Coquitlam",)},
     {"name": "Port Moody", "cities": ("City of Port Moody",)},
     {"name": "New Westminster", "cities": ("City of New Westminster",)},
+    {"name": "Burnaby", "cities": ("City of Burnaby",)},
 )
 
 # Built once at import: {source_name -> area name}, so annotating an event
@@ -338,5 +378,6 @@ ACTIVITY_GROUPS = (
         ),
     ),
     ("Fitness classes", ("Fitness",)),
+    ("Golf", ("Golf",)),
     ("Everything else", None),
 )

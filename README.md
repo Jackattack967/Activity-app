@@ -1,12 +1,12 @@
 # Activity Schedule Dashboard
 
 Scrapes public drop-in activity schedules (skating, swimming, sports,
-fitness) from municipal recreation portals and shows them in one unified,
-filterable dashboard.
+fitness, golf) from municipal recreation portals and shows them in one
+unified, filterable dashboard.
 
-Currently configured for **Coquitlam**, **Port Coquitlam**, **Port Moody**
-and **New Westminster** — around 600 sessions across 23 venues over the next
-14 days. See [`config.py`](config.py) for how to add a calendar or a city.
+Currently configured for **Coquitlam**, **Port Coquitlam**, **Port Moody**,
+**New Westminster** and **Burnaby** — around 790 sessions across 24 venues
+over the next 14 days. See [`config.py`](config.py) for how to add a calendar or a city.
 
 Cities don't all run the same booking software, so the scraper is split by
 platform: [`scraper.py`](scraper.py) picks a module per source, and
@@ -109,6 +109,31 @@ for Coquitlam, Port Moody, New Westminster, Maple Ridge, Delta, White Rock,
 Surrey and North Vancouver (NVRC). Port Coquitlam and Burnaby are on
 ActiveNet. Vancouver and Richmond are on neither.
 
+Burnaby is configured for golf only, which is the one activity no other
+city here publishes. Its pools, rinks and gyms are on the same ActiveNet
+tenant and would be config alone, but they roughly double the size of the
+dashboard, so they are left out until they are actually wanted.
+
+### Golf, and what is missing from it
+
+Golf comes from Burnaby's two municipal courses, Burnaby Mountain and
+Riverway, and it is **lessons and clinics, not tee times**. Those are real
+bookable sessions with real remaining-spot counts, which is what a watch
+needs in order to tell you a place has opened up.
+
+Booking a plain round is a different system. Both Burnaby and Vancouver run
+their tee sheets on CPS Golf (`golfburnaby.cps.golf`, `golfvancouver.cps.golf`),
+which answers every automated request with an HTTP 403 from Cloudflare.
+Getting around that would mean defeating bot protection the vendor has
+deliberately turned on, so this app doesn't read tee times at all — use the
+courses' own sites for those.
+
+The Tri-Cities have no municipal golf to add. Coquitlam, Port Coquitlam and
+Port Moody run no city courses, and Port Coquitlam's portal has no golf
+category; the courses near them (Carnoustie, Westwood Plateau, Vancouver
+Golf Club) are private clubs, not city facilities. Vancouver's portal has no
+golf either — only two gym classes named after it.
+
 ## Configuration
 
 All configuration is done through environment variables — nothing secret or
@@ -167,6 +192,14 @@ in the south-west out to Smiling Creek in the north-east — is about 6.7 km
 across, which swallows both Port Moody and Port Coquitlam whole. Hulls of
 the same venues don't overlap at all.
 
+An area with fewer than three visible venues has no hull, and gets a small
+circle on each venue instead of one circle between them. Burnaby is why:
+its two golf courses are 7.9 km apart, so a single circle at their midpoint
+would tint a part of the city containing neither, with both pins outside
+their own area. Widening it to reach them would take a 4.4 km radius, which
+crosses the river and swallows two of New Westminster's venues — the same
+problem hulls were introduced to solve.
+
 On a first visit the app asks once for your location and preselects the
 nearest area in the preferences dialog. It picks the area of the closest
 *venue*, not the closest area centre: Port Moody's three venues average out
@@ -224,7 +257,7 @@ sqlite database. It never touches the real one.
 
 ## Tests
 
-All three are plain scripts — no pytest, no network, no real database. Each
+All four are plain scripts — no pytest, no network, no real database. Each
 exits non-zero on failure.
 
 ```bash
@@ -249,6 +282,6 @@ listed in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) — chiefly
 [Gunicorn](https://gunicorn.org/) and [pywebpush](https://github.com/web-push-libs/pywebpush).
 
 Schedule data comes from the public booking portals of the Cities of
-Coquitlam, Port Coquitlam, Port Moody and New Westminster. This project is
+Coquitlam, Port Coquitlam, Port Moody, New Westminster and Burnaby. This project is
 unofficial and is not affiliated with, endorsed by, or operated by any of
 those cities, or by PerfectMind or Active Network.

@@ -34,6 +34,13 @@ def classify_activity(event_name: str, fallback: str) -> str:
 
     Note there is deliberately no rule mapping "hockey" to skating: the
     sports calendars contain *floor* hockey, which is not on ice.
+
+    There is deliberately no "golf" rule either, for the opposite reason.
+    Golf only reaches this app from calendars that are nothing but golf, so
+    the source's own activity_type is already correct and a name rule would
+    add nothing. It would, however, start mislabelling things the day a
+    fitness calendar is added: Vancouver's portal offers "Exercise for Golf
+    Conditioning", which is a fitness class, not golf.
     """
     for activity, pattern in _ACTIVITY_PATTERNS:
         if pattern.search(event_name or ""):

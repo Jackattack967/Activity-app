@@ -63,7 +63,13 @@ _WEEKDAYS = {
 # ActiveNet's own category names, mapped onto the activity types this
 # dashboard already uses so that Port Coquitlam's chips line up with
 # Coquitlam's rather than sitting beside them as near-duplicates.
+#
+# Each city names its own categories, so this is keyed by the exact text a
+# city publishes, and two cities need not agree: Port Coquitlam prefixes
+# everything "Drop-in - ", Burnaby does not. A category that is missing
+# here is not an error — the source's own "activity_type" is used instead.
 CATEGORY_ACTIVITY_TYPES = {
+    # City of Port Coquitlam
     "Drop-in - Aquatics": "Swimming",
     "Drop-in - Skating": "Skating",
     "Drop-in - Sport": "Sports",
@@ -71,6 +77,8 @@ CATEGORY_ACTIVITY_TYPES = {
     "Drop-in - Youth Services": "Youth",
     "Drop-in - Children Services": "All Ages",
     "Drop-in - Seniors": "Adult",
+    # City of Burnaby
+    "Golf": "Golf",
 }
 
 _TAG_RE = re.compile(r"<[^>]+>")

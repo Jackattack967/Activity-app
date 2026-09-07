@@ -469,6 +469,7 @@
       "Port Coquitlam": "#c2410c",
       "Port Moody": "#0f766e",
       "New Westminster": "#7c3aed",
+      Burnaby: "#be185d",
     };
     const AREA_FALLBACK_COLOR = "#64748b";
 
@@ -681,9 +682,20 @@
             L.polygon(padOutward(hull, centre, ZONE_PADDING_METRES), style).addTo(zoneLayer);
           } else {
             // One or two venues, or all of them along one road — there is
-            // no area to enclose, so mark the spot rather than draw a
-            // sliver that only looks like a mistake.
-            L.circle(centre, { ...style, radius: ZONE_FALLBACK_RADIUS_METRES }).addTo(zoneLayer);
+            // no area to enclose, so mark where the venues are rather than
+            // draw a sliver that only looks like a mistake.
+            //
+            // One circle per venue, not a single one at their centroid.
+            // Burnaby's two golf courses are 7.9 km apart, and a circle
+            // halfway between them tints a patch of the city containing
+            // neither, with both pins sitting outside their own area.
+            // Widening that circle to reach them instead would take a
+            // 4.4 km radius, which crosses the river and swallows two of
+            // New Westminster's venues — which is exactly why these zones
+            // are hulls and not circles in the first place.
+            for (const point of coords) {
+              L.circle(point, { ...style, radius: ZONE_FALLBACK_RADIUS_METRES }).addTo(zoneLayer);
+            }
           }
         }
       }

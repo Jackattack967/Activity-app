@@ -238,5 +238,79 @@ check(
     len(config.AREAS),
 )
 
+print("\n10. GOLF IS TYPED BY ITS SOURCE, NOT BY ITS NAME")
+GOLF_SOURCE = {
+    "source_name": "City of Burnaby",
+    "platform": "activenet",
+    "location": "Riverway Golf Course",
+    "calendar_label": "Golf — Riverway Golf Course",
+    "activity_type": "Golf",
+}
+golf_row = {
+    "name": "Jr Golf | Play (age 8-10) | Skills Development | 8 weeks",
+    "category": "Golf",
+    "time_range": "11:00 AM - 12:30 PM",
+    "openings": "2",
+    "number": "126745",
+    "desc": "<p>An 8-week program.</p>",
+    "detail_url": "https://example.invalid/activity/2",
+    "location": {},
+}
+ev = an._normalize(golf_row, GOLF_SOURCE, dt.date(2026, 9, 12))
+check("Burnaby's 'Golf' category maps to the Golf type", ev.activity_type, "Golf")
+check("the course is the building", ev.location, "Riverway Golf Course")
+# Burnaby labels no room inside the clubhouse, so without the fallback the
+# card's second line would be blank.
+check("an unlabelled room falls back to the course", ev.facility, "Riverway Golf Course")
+check("spots still read the way badgeInfo() expects", ev.spots, "2 spots left")
+
+ev = an._normalize({**golf_row, "category": ""}, GOLF_SOURCE, dt.date(2026, 9, 12))
+check("still Golf when the row names no category", ev.activity_type, "Golf")
+
+# The point of this section. classify_activity has no "golf" rule on
+# purpose: a name rule cannot tell a golf lesson from a gym class named
+# after one, and "Exercise for Golf Conditioning" is a real class in
+# Vancouver's portal. If someone later adds a \bgolf\b pattern to
+# _ACTIVITY_PATTERNS to "fix" golf, this is the test that should stop them.
+FITNESS_SOURCE = {**GOLF_SOURCE, "activity_type": "Fitness"}
+ev = an._normalize(
+    {**golf_row, "name": "Exercise for Golf Conditioning", "category": "Group Fitness"},
+    FITNESS_SOURCE,
+    dt.date(2026, 9, 12),
+)
+check("a fitness class named after golf stays fitness", ev.activity_type, "Fitness")
+
+print("\n11. EVERY ACTIVENET VENUE CAN BE PUT ON THE MAP")
+# An ActiveNet source names its building in config rather than reading it
+# from the portal, so a typo there is invisible: the events still arrive and
+# only the map marker quietly goes missing. PerfectMind sources are not
+# checked here, because they learn their venue names by scraping.
+check(
+    "no ActiveNet venue is missing coordinates",
+    sorted(
+        {
+            s["location"]
+            for s in config.SOURCES
+            if s.get("platform") == "activenet"
+            and s["location"] not in config.FACILITY_COORDS
+        }
+    ),
+    [],
+)
+
+print("\n12. THE ACTIVITY GROUPS STAY A CLEAN SPLIT")
+# The preferences dialog offers these as one-of-many, so a type claimed by
+# two groups would make two different answers select the same sessions.
+claimed = [t for _, types in config.ACTIVITY_GROUPS if types for t in types]
+check("no activity type is claimed by two groups", len(claimed), len(set(claimed)))
+check(
+    "exactly one group is the catch-all complement",
+    sum(1 for _, types in config.ACTIVITY_GROUPS if types is None),
+    1,
+)
+check("the catch-all is listed last", config.ACTIVITY_GROUPS[-1][1], None)
+check("golf is offered as a starting preference", "Golf" in claimed, True)
+
+
 print("\n" + ("ALL PASSED" if not FAIL else f"FAILURES: {FAIL}"))
 sys.exit(1 if FAIL else 0)
