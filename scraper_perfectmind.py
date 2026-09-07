@@ -25,7 +25,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
-from events import Event, classify_activity
+from events import Event, classify_activity, is_cancelled
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +167,7 @@ def _normalize(raw: dict, source: dict) -> Event:
 
     return Event(
         activity_type=classify_activity(event_name, source["activity_type"]),
+        cancelled=is_cancelled(event_name),
         event_name=event_name,
         date=iso_date,
         day_of_week=day_of_week,

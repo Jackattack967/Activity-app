@@ -196,11 +196,29 @@ body {
 }
 .banner ul { margin: 0.35rem 0 0 1.1rem; }
 
+/* Same column as <main> and .star-hint. Without the width limit this ran
+   edge to edge while everything it filters sat indented in a 900px column
+   below it, so the two read as unrelated things. */
 .filters {
+  max-width: 900px;
+  margin: 0 auto;
   padding: 1rem 1.5rem 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+}
+
+/* The controls and the view toggle, on one line with the toggle pushed to
+   the far end. */
+.filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.filter-row .filter-group-controls {
+  flex: 1 1 20rem;
 }
 
 .filter-group {
@@ -208,6 +226,28 @@ body {
   flex-wrap: wrap;
   gap: 0.5rem;
   align-items: center;
+}
+
+/* One swipeable row, at every width. Fifteen chips need about 1310px and
+   the column is 852px, so wrapping costs a second 34px row at the top of
+   the first screen — and shrinking them enough to fit would mean a 35%
+   cut, which is unreadable. This is the treatment the phone layout already
+   chose for the same reason; it just used to stop at 640px.
+   The fade on the trailing edge is the only hint that there is more, since
+   the scrollbar is hidden. */
+#activity-filters {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 0.15rem;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 2.5rem), transparent);
+}
+#activity-filters::-webkit-scrollbar {
+  display: none;
+}
+#activity-filters .chip {
+  flex: 0 0 auto;
 }
 
 .chip {
@@ -431,6 +471,20 @@ main {
   cursor: default;
 }
 
+/* A cancelled session stays on the schedule — someone who saw it yesterday
+   needs to be told it is off — but it must not read as available. */
+.badge-cancelled {
+  background: #fdf1dc;
+  color: #a4610a;
+}
+.event-card-cancelled {
+  opacity: 0.75;
+}
+.event-card-cancelled .event-title-row h3 {
+  text-decoration: line-through;
+  text-decoration-color: #a4610a;
+}
+
 .activity-tag {
   font-size: 0.7rem;
   text-transform: uppercase;
@@ -626,8 +680,18 @@ footer a { color: var(--text-muted); }
     flex: 0 0 auto;
   }
 
-  /* Location and search share a row instead of stacking. */
-  .filters .filter-group:last-child {
+  /* Stacked again on a phone: side by side there is no room for both.
+     .view-toggle keeps its own full-width rule below. */
+  .filter-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+  }
+
+  /* Location and search share a row instead of stacking. Was written as
+     .filter-group:last-child, which matched nothing — .view-toggle is the
+     last child of .filters, not a .filter-group — so this never applied. */
+  .filters .filter-group-controls {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.4rem 0.5rem;

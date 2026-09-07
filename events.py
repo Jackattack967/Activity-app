@@ -19,6 +19,22 @@ from dataclasses import dataclass
 # unrecognised events fall back to the calendar's configured type.
 #
 # Ordered: the first match wins, so put more specific patterns first.
+# Portals announce a cancellation by editing the session's name and leaving
+# everything else alone: "Canceled: Cycle Express", "CANCELLED - Cycle".
+# The spot count is untouched, so a cancelled class keeps whatever number it
+# had — in practice "1 spot left", which makes the sessions that are *not*
+# happening look like the scarcest thing on the schedule.
+#
+# Both spellings appear (the American one comes from one portal, the
+# Canadian from another), and a word boundary stops it matching "Cancellation Policy".
+_CANCELLED_RE = re.compile(r"\bcancell?ed\b", re.I)
+
+
+def is_cancelled(event_name: str) -> bool:
+    """Whether the portal has renamed this session to announce it is off."""
+    return bool(_CANCELLED_RE.search(event_name or ""))
+
+
 _ACTIVITY_PATTERNS = (
     ("Badminton", re.compile(r"\bbadminton\b", re.I)),
     ("Basketball", re.compile(r"\bbasketball\b", re.I)),
@@ -68,3 +84,7 @@ class Event:
     detail_url: str = ""
     # True when the portal offers its own waitlist for this (full) session.
     has_waitlist: bool = False
+    # Decided once here, from the name, rather than re-derived by every
+    # consumer — the dashboard and the alerts must not disagree about
+    # whether a session is happening.
+    cancelled: bool = False

@@ -121,7 +121,10 @@
     {% endfor %}
   </div>
 
-  <div class="filter-group">
+  {# The controls and the view toggle share one row. They used to stack,
+     which spent a whole row of the first screen on two buttons. #}
+  <div class="filter-row">
+  <div class="filter-group filter-group-controls">
     <select id="area-filter" aria-label="Area">
       <option value="">All areas</option>
       {% for area in areas %}
@@ -149,6 +152,7 @@
   <div class="view-toggle" id="view-toggle" role="group" aria-label="View">
     <button type="button" class="view-btn active" data-view="list" aria-pressed="true">List</button>
     <button type="button" class="view-btn" data-view="map" aria-pressed="false">Map</button>
+  </div>
   </div>
 </div>
 

@@ -399,5 +399,52 @@ check(
 )
 
 
+print("\n15. A CANCELLED SESSION IS NEVER AN OPENING")
+# Portals announce a cancellation by renaming the session and leaving its
+# spot count alone. All four cancelled sessions on the live schedule read
+# "1 spot left", so before this they were both the most urgent-looking rows
+# on the page and, worse, genuinely open as far as the watcher was
+# concerned — a star on one would have sent a real "a spot opened" alert.
+import events
+
+for name, want in [
+    ("Canceled: Cycle Express", True),          # spelling from one portal
+    ("CANCELLED - Shallow Aquafit", True),      # and from another
+    ("Canceled: Cycle & Strength", True),
+    ("cancelled yoga", True),
+    ("Family Skate", False),
+    ("Adult Stick, Ring & Puck", False),
+    # Must not fire on a word that merely starts the same way.
+    ("Cancellation Policy Workshop", False),
+    ("", False),
+]:
+    check(f"is_cancelled({name!r})", events.is_cancelled(name), want)
+
+# The whole point: the stale count must not win.
+check(
+    "a cancelled session with a spot count is not open",
+    watcher.is_open({"spots": "1 spot left", "status": "More Info", "cancelled": True}),
+    False,
+)
+check(
+    "the same session without the flag still would be",
+    watcher.is_open({"spots": "1 spot left", "status": "More Info", "cancelled": False}),
+    True,
+)
+check(
+    "a missing flag is treated as not cancelled",
+    watcher.is_open({"spots": "1 spot left", "status": "More Info"}),
+    True,
+)
+
+# And the scrapers have to stamp it, or nothing above ever runs.
+ev = an._normalize(
+    {**golf_row, "name": "CANCELLED - Shallow Aquafit"}, GOLF_SOURCE, dt.date(2026, 9, 12)
+)
+check("the scraper stamps it onto the event", ev.cancelled, True)
+ev = an._normalize(golf_row, GOLF_SOURCE, dt.date(2026, 9, 12))
+check("and leaves an ordinary session alone", ev.cancelled, False)
+
+
 print("\n" + ("ALL PASSED" if not FAIL else f"FAILURES: {FAIL}"))
 sys.exit(1 if FAIL else 0)

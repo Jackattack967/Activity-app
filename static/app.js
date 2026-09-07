@@ -200,6 +200,17 @@
     // public swim you can simply turn up to is exactly what someone
     // filtering for somewhere to go wants to see.
     function badgeInfo(ev) {
+      // Before the spot count, which is the thing that goes stale: a portal
+      // announces a cancellation by renaming the session and leaves its old
+      // count in place, so all four cancelled sessions on the live schedule
+      // were wearing a green "1 spot left" — the scarcest-looking rows on
+      // the page were the ones not happening. Not "full" either: the filter
+      // is called Hide full sessions, and someone who saw this class
+      // yesterday is better off being told it is off than not shown it.
+      if (ev.cancelled) {
+        return { cls: "badge-cancelled", text: "Cancelled", open: false, full: false };
+      }
+
       const spots = (ev.spots || "").trim();
       const status = (ev.status || "").trim();
       const spotsLower = spots.toLowerCase();
@@ -503,7 +514,7 @@
 
     function buildCard(ev) {
       const card = document.createElement("article");
-      card.className = "event-card";
+      card.className = "event-card" + (ev.cancelled ? " event-card-cancelled" : "");
 
       const timeCol = document.createElement("div");
       timeCol.className = "event-time";

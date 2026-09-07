@@ -38,6 +38,15 @@ def is_open(event: dict) -> bool:
     Mirrors the badge logic in static/app.js so the dashboard and the alerts
     never disagree about what "open" means.
     """
+    # Checked before the spot count, because the count is exactly what
+    # goes stale: a portal announces a cancellation by renaming the
+    # session and leaves "1 spot left" sitting there. Without this, all
+    # four cancelled sessions in the live schedule read as open, and a
+    # watch on one would have sent a real "a spot opened" alert for a
+    # class that is not happening.
+    if event.get("cancelled"):
+        return False
+
     spots = (event.get("spots") or "").strip().lower()
     status = (event.get("status") or "").strip()
     if "full" in spots:
