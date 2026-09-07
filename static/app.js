@@ -457,6 +457,36 @@
     // Roughly centres the Tri-Cities, used only until markers exist to fit.
     const MAP_HOME = [49.2695, -122.8175];
     const MAP_HOME_ZOOM = 12;
+
+    // Panning is fenced to Canada.
+    //
+    // Every venue here is in Metro Vancouver, so most of a world map is
+    // somewhere this app has nothing to say about — and panning there
+    // still pulls tiles from OpenStreetMap's donated, best-effort servers,
+    // whose usage policy asks that their capacity not be spent on demand
+    // nobody actually made. The fence is drawn at Canada rather than at
+    // the Lower Mainland so that adding a city never means moving it.
+    //
+    // Corner to corner: Middle Island in Lake Erie (41.68 N) up to Cape
+    // Columbia on Ellesmere Island (83.11 N), and the Yukon/Alaska border
+    // (141.0 W) across to Cape Spear in Newfoundland (52.62 W). Padded
+    // half a degree so those real corners are reachable rather than
+    // pinned against the edge of the viewport.
+    //
+    // test_scrapers.py reads these four numbers straight out of this file
+    // and checks every venue falls inside them, so a coordinate typed with
+    // the wrong sign is caught here rather than by a map that refuses to
+    // sit still.
+    const MAP_MAX_BOUNDS = [
+      [41.2, -141.5],
+      [83.6, -52.1],
+    ];
+    // A fence only means something while the map is smaller than the fence.
+    // Zoomed further out than this the whole country no longer fills the
+    // screen, so Leaflet has to show what lies beyond it and the limit
+    // stops doing anything. Zoom 4 is about where Canada still spans a
+    // desktop window.
+    const MAP_MIN_ZOOM = 4;
     // Long popups are unusable on a phone; the rest stay in the list view.
     const MAX_POPUP_SESSIONS = 8;
 
@@ -511,6 +541,12 @@
         // Eases the wheel zoom instead of jumping a whole level per notch.
         wheelPxPerZoomLevel: 120,
         zoomControl: true,
+        maxBounds: MAP_MAX_BOUNDS,
+        // Solid rather than elastic. The default lets a drag pull the map
+        // past the fence and then spring back, which reads as the map
+        // fighting you; 1.0 simply stops it at the edge.
+        maxBoundsViscosity: 1.0,
+        minZoom: MAP_MIN_ZOOM,
       }).setView(MAP_HOME, MAP_HOME_ZOOM);
 
       // OpenStreetMap's own tiles. Carto's Positron basemap was tried here

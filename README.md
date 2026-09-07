@@ -200,6 +200,17 @@ their own area. Widening it to reach them would take a 4.4 km radius, which
 crosses the river and swallows two of New Westminster's venues — the same
 problem hulls were introduced to solve.
 
+Panning is fenced to Canada (`MAP_MAX_BOUNDS` in `static/app.js`), and the
+map will not zoom out past the point where the country stops filling the
+screen. Every venue is in Metro Vancouver, so the rest of the world is
+somewhere this app has nothing to say about — and panning there still pulls
+tiles from OpenStreetMap's donated servers, whose [usage policy](https://operations.osmfoundation.org/policies/tiles/)
+asks that their capacity not be spent on demand nobody made. The fence is
+drawn at Canada rather than at the Lower Mainland so that adding a city
+never means moving it. `test_scrapers.py` reads those bounds out of the
+JavaScript and checks every venue falls inside them, which is what catches
+a longitude typed without its minus sign.
+
 On a first visit the app asks once for your location and preselects the
 nearest area in the preferences dialog. It picks the area of the closest
 *venue*, not the closest area centre: Port Moody's three venues average out

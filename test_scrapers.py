@@ -10,6 +10,7 @@ city's servers or depending on what happens to be scheduled today.
 """
 import datetime as dt
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -310,6 +311,52 @@ check(
 )
 check("the catch-all is listed last", config.ACTIVITY_GROUPS[-1][1], None)
 check("golf is offered as a starting preference", "Golf" in claimed, True)
+
+
+print("\n13. EVERY VENUE IS INSIDE THE MAP'S FENCE")
+# The map fences panning to Canada, so a venue outside that fence would be
+# unreachable: fitBounds would try to frame it and maxBounds would refuse to
+# go there, leaving the map stuck against its own edge. The numbers are read
+# out of app.js rather than repeated here, so there is only one copy of them
+# and this cannot drift.
+_js = open(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "static", "app.js"),
+    encoding="utf-8",
+).read()
+_num = r"(-?\d+(?:\.\d+)?)"
+_fence = re.search(
+    rf"MAP_MAX_BOUNDS\s*=\s*\[\s*\[\s*{_num}\s*,\s*{_num}\s*\]\s*,"
+    rf"\s*\[\s*{_num}\s*,\s*{_num}\s*\]",
+    _js,
+)
+check("the fence is readable from app.js", _fence is not None, True)
+south, west, north, east = (float(g) for g in _fence.groups())
+check("the fence is the right way up", (south < north, west < east), (True, True))
+
+outside = sorted(
+    name
+    for name, (lat, lng) in config.FACILITY_COORDS.items()
+    if not (south <= lat <= north and west <= lng <= east)
+)
+check("no venue sits outside it", outside, [])
+
+# A longitude typed without its minus sign is the mistake this really
+# guards against: 122 E instead of 122 W is in inner Mongolia, and the only
+# symptom would be a map that will not stay where it is put.
+check(
+    "a sign-flipped longitude would be caught",
+    (west <= 122.79 <= east),
+    False,
+)
+
+_home = re.search(rf"MAP_HOME\s*=\s*\[\s*{_num}\s*,\s*{_num}\s*\]", _js)
+check("the fallback view is readable", _home is not None, True)
+home_lat, home_lng = (float(g) for g in _home.groups())
+check(
+    "the fallback view is inside the fence too",
+    south <= home_lat <= north and west <= home_lng <= east,
+    True,
+)
 
 
 print("\n" + ("ALL PASSED" if not FAIL else f"FAILURES: {FAIL}"))
