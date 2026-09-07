@@ -103,8 +103,14 @@
       console.error("Could not parse events data:", err);
     }
     let loggedIn = false;
+    // Whether this deployment has accounts at all. The star is shown to
+    // signed-out visitors too — see buildFavoriteButton — so this, not
+    // loggedIn, is what decides whether a star belongs on a card.
+    let accountsEnabled = false;
     try {
-      loggedIn = !!JSON.parse(document.getElementById("user-data").textContent).loggedIn;
+      const userData = JSON.parse(document.getElementById("user-data").textContent);
+      loggedIn = !!userData.loggedIn;
+      accountsEnabled = !!userData.accountsEnabled;
     } catch (err) {
       console.error("Could not parse user data:", err);
     }
@@ -348,15 +354,68 @@
       }, 0);
     }
 
+    // Where the header's sign-in button points. Read from the DOM rather
+    // than hardcoded, so the route stays defined in exactly one place.
+    function signInUrl() {
+      const link = document.querySelector(".google-signin-btn");
+      return link ? link.getAttribute("href") : null;
+    }
+
+    // Shown to a signed-out visitor. Watching needs an account, but hiding
+    // the star until you have one means the only people who can discover
+    // the feature are the people already using it.
+    function openSignInPrompt(btn, ev) {
+      closeStarMenus();
+      const menu = document.createElement("div");
+      menu.className = "star-menu star-menu-signin";
+
+      const blurb = document.createElement("p");
+      blurb.className = "star-menu-blurb";
+      // textContent, not innerHTML: the name comes from a scraped page.
+      blurb.textContent =
+        `Watch “${ev.event_name}” and you'll be told the moment a spot opens` +
+        ` — by email, or a notification on your phone.`;
+      menu.appendChild(blurb);
+
+      const href = signInUrl();
+      if (href) {
+        const link = document.createElement("a");
+        link.className = "star-menu-item star-menu-signin-link";
+        link.href = href;
+        link.textContent = "Sign in with Google to start";
+        menu.appendChild(link);
+      }
+
+      btn.parentElement.appendChild(menu);
+      setTimeout(() => {
+        document.addEventListener("click", closeStarMenus, { once: true });
+      }, 0);
+    }
+
     function buildFavoriteButton(ev) {
       const btn = document.createElement("button");
       btn.type = "button";
+
+      if (!loggedIn) {
+        btn.className = "favorite-btn favorite-btn-signed-out";
+        btn.textContent = "☆";
+        btn.title = "Watch this — sign in to be told when a spot opens";
+        btn.setAttribute("aria-label", `Watch ${ev.event_name} — sign in required`);
+        btn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          openSignInPrompt(btn, ev);
+        });
+        return btn;
+      }
+
       btn.className =
         "favorite-btn" +
         (ev.is_favorited ? " favorited" : "") +
         (ev.favorite_scope === "session" ? " favorited-once" : "");
       btn.textContent = ev.is_favorited ? "★" : "☆";
       btn.title = favoriteTitle(ev);
+      btn.setAttribute("aria-label", favoriteTitle(ev));
+      btn.setAttribute("aria-pressed", ev.is_favorited ? "true" : "false");
       btn.addEventListener("click", async (e) => {
         e.stopPropagation();
         if (ev.is_favorited) {
@@ -392,7 +451,7 @@
       const titleRow = document.createElement("div");
       titleRow.className = "event-title-row";
 
-      if (loggedIn && ev.source_name && ev.course_id) {
+      if (accountsEnabled && ev.source_name && ev.course_id) {
         titleRow.appendChild(buildFavoriteButton(ev));
       }
 

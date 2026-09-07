@@ -149,13 +149,25 @@
 </div>
 
 {% if accounts_enabled %}
-<p class="star-hint">
-  {% if logged_in %}
-    Tap <span class="star-hint-icon">☆</span> on any activity to watch it — you'll be alerted the moment a spot opens.
-  {% else %}
-    Sign in to star activities and get alerted the moment a spot opens in one.
-  {% endif %}
-</p>
+{# The one feature people have to be told about: nothing on a schedule
+   suggests the page can watch it for you. It used to be a line of grey
+   fine print, next to no star at all for signed-out visitors — so the
+   only people who could discover watching were the ones already using
+   it. #}
+<div class="star-hint">
+  <p class="star-hint-inner">
+    <span class="star-hint-icon" aria-hidden="true">☆</span>
+    {% if logged_in %}
+    <span><strong>Watch an activity.</strong> Tap the star on any session and
+      you'll be told the moment a spot opens — by email, or a notification on
+      your phone.</span>
+    {% else %}
+    <span><strong>Never miss a spot.</strong> Tap the star on any session to
+      watch it, and you'll be told the moment a place opens up. Takes a
+      Google sign-in.</span>
+    {% endif %}
+  </p>
+</div>
 {% endif %}
 
 <main id="schedule-root">
@@ -279,7 +291,7 @@
 {# "or []" so a missing context variable degrades to "Anything" only,
    rather than failing to serialise and taking the whole page down. #}
 <script id="activity-groups" type="application/json">{{ (activity_groups or []) | tojson }}</script>
-<script id="user-data" type="application/json">{{ {"loggedIn": logged_in} | tojson }}</script>
+<script id="user-data" type="application/json">{{ {"loggedIn": logged_in, "accountsEnabled": accounts_enabled} | tojson }}</script>
 <script src="{{ url_for('static', filename='app.js') }}"></script>
 <script>
   // Served from the site root, not /static/, so its scope covers the whole
