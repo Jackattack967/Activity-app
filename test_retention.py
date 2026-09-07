@@ -22,7 +22,7 @@ os.environ.pop("RETENTION_ENABLED", None)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask
-from models import Favorite, PushSubscription, User, db
+from models import Favorite, PushSubscription, User, db, utcnow
 import retention
 import watcher
 
@@ -33,7 +33,7 @@ db.init_app(app)
 sent = []
 watcher.send_deletion_warning = lambda user, days: (sent.append((user.id, days)), True)[1]
 
-now = dt.datetime.utcnow()
+now = utcnow()
 FAIL = []
 
 
@@ -123,7 +123,7 @@ with app.app_context():
     back = User.query.filter_by(google_sub="never_warned_old").first()
     retention.run()
     check("was warned", back.deletion_warned_at is not None, True)
-    back.last_seen_at = dt.datetime.utcnow()   # simulates sign-in
+    back.last_seen_at = utcnow()   # simulates sign-in
     back.deletion_warned_at = None
     db.session.commit()
     r = retention.run()

@@ -116,26 +116,37 @@
       return "Updated " + d.toLocaleString();
     }
 
+    // Three answers, not two. `open` means the portal said there is room;
+    // `full` means it said there is not. Neither being true is the third
+    // case, and it is a big one: about a quarter of all sessions are
+    // published with no capacity at all (status "More Info" — most of
+    // Coquitlam's and New Westminster's drop-in skating and swimming).
+    //
+    // Those two must stay separate, because a filter that hides everything
+    // that is not known-open hides every one of those sessions, and a
+    // public swim you can simply turn up to is exactly what someone
+    // filtering for somewhere to go wants to see.
     function badgeInfo(ev) {
       const spots = (ev.spots || "").trim();
       const status = (ev.status || "").trim();
       const spotsLower = spots.toLowerCase();
       if (spotsLower.includes("full")) {
-        return { cls: "badge-full", text: spots, open: false };
+        return { cls: "badge-full", text: spots, open: false, full: true };
       }
       if (spotsLower.includes("spot")) {
-        return { cls: "badge-open", text: spots, open: true };
+        return { cls: "badge-open", text: spots, open: true, full: false };
       }
       if (status === "Register") {
-        return { cls: "badge-open", text: "Register", open: true };
+        return { cls: "badge-open", text: "Register", open: true, full: false };
       }
       if (status === "Closed") {
-        return { cls: "badge-closed", text: "Closed", open: false };
+        return { cls: "badge-closed", text: "Closed", open: false, full: true };
       }
+      // Capacity unknown: not claimed to be open, but not full either.
       if (status) {
-        return { cls: "badge-info", text: status, open: false };
+        return { cls: "badge-info", text: status, open: false, full: false };
       }
-      return { cls: "badge-info", text: "Details", open: false };
+      return { cls: "badge-info", text: "Details", open: false, full: false };
     }
 
     function formatDateHeading(isoDate, dayOfWeek) {
@@ -168,14 +179,27 @@
     }
 
     // A session earlier today is just noise — you can't attend it any more.
-    function alreadyFinished(ev) {
-      if (ev.date !== todayIso()) return false;
+    //
+    // The clock is passed in rather than read here: this runs once per
+    // event, and reading it inside meant building a Date and formatting
+    // today's date eight hundred times per keystroke to get eight hundred
+    // identical answers.
+    function finishedAlready(ev, today, nowMinutes) {
+      if (ev.date !== today) return false;
       const end = timeToMinutes(ev.end_time);
       const start = timeToMinutes(ev.start_time);
       const finishesAt = end === null ? start : end;
       if (finishesAt === null) return false;
+      return finishesAt < nowMinutes;
+    }
+
+    // Everything that hasn't already happened. One clock reading for the
+    // whole pass.
+    function upcomingEvents() {
+      const today = todayIso();
       const now = new Date();
-      return finishesAt < now.getHours() * 60 + now.getMinutes();
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      return allEvents.filter((ev) => !finishedAlready(ev, today, nowMinutes));
     }
 
     // A star covers the activity — its name at a venue — not the single
@@ -189,9 +213,32 @@
       );
     }
 
-    function countSessions(ev) {
-      return allEvents.filter((e) => sameActivity(e, ev)).length;
+    // How many sessions one starred activity covers. This is asked once
+    // per starred card, and used to walk the whole event list each time —
+    // O(cards x events), which is only invisible because anonymous
+    // visitors have no stars. Indexed once per data load instead.
+    function activityKey(ev) {
+      return JSON.stringify([ev.source_name, ev.event_name, ev.location || ""]);
     }
+
+    let sessionCounts = new Map();
+
+    function indexSessionCounts() {
+      sessionCounts = new Map();
+      for (const e of allEvents) {
+        const key = activityKey(e);
+        sessionCounts.set(key, (sessionCounts.get(key) || 0) + 1);
+      }
+    }
+
+    function countSessions(ev) {
+      return sessionCounts.get(activityKey(ev)) || 0;
+    }
+
+    // allEvents was parsed further up, but `sessionCounts` is only bound
+    // here, so the first index has to be taken at this point rather than
+    // beside the parse.
+    indexSessionCounts();
 
     function favoriteTitle(ev) {
       if (ev.favorite_scope === "activity") {
@@ -908,26 +955,25 @@
     // The events currently passing every filter. Split out of render() so
     // the list and the map are guaranteed to be showing the same set —
     // "the map is another view of this data", not a second query.
-    function visibleEvents() {
+    function visibleEvents(upcoming) {
       const keyword = keywordFilterEl.value.trim().toLowerCase();
       const area = areaFilterEl ? areaFilterEl.value : "";
       const location = locationFilterEl.value;
-      const openOnly = openOnlyFilterEl.checked;
+      const hideFull = openOnlyFilterEl.checked;
 
       const favoritesOnly = favoritesOnlyFilterEl ? favoritesOnlyFilterEl.checked : false;
 
-      const upcoming = allEvents.filter((ev) => !alreadyFinished(ev));
-
-      return upcoming.filter((ev) => {
+      return (upcoming || upcomingEvents()).filter((ev) => {
         if (!matchesActivity(ev)) return false;
         if (area && ev.area !== area) return false;
         if (location && ev.location !== location) return false;
         if (keyword && !ev.event_name.toLowerCase().includes(keyword)) return false;
         if (favoritesOnly && !ev.is_favorited) return false;
-        // Open-only used to be applied after the cards were built, via
-        // card._open. Doing it here instead gives the same answer —
-        // badgeInfo() is what set that flag — and lets the map reuse it.
-        if (openOnly && !badgeInfo(ev).open) return false;
+        // Hides only what is *known* to be full. Testing !open instead
+        // would also throw away every session whose portal publishes no
+        // capacity — 212 of 801 when this was last measured, including
+        // half the skating and most of the swimming.
+        if (hideFull && badgeInfo(ev).full) return false;
         return true;
       });
     }
@@ -967,11 +1013,11 @@
       const keyword = keywordFilterEl.value.trim().toLowerCase();
       const area = areaFilterEl ? areaFilterEl.value : "";
       const location = locationFilterEl.value;
-      const openOnly = openOnlyFilterEl.checked;
+      const hideFull = openOnlyFilterEl.checked;
       const favoritesOnly = favoritesOnlyFilterEl ? favoritesOnlyFilterEl.checked : false;
 
-      const upcoming = allEvents.filter((ev) => !alreadyFinished(ev));
-      const visible = visibleEvents();
+      const upcoming = upcomingEvents();
+      const visible = visibleEvents(upcoming);
 
       renderList(visible);
       renderMap(visible);
@@ -984,7 +1030,7 @@
           !!area ||
           !!location ||
           !!keyword ||
-          openOnly ||
+          hideFull ||
           favoritesOnly;
         const textEl = document.getElementById("empty-state-text");
         const clearBtn = document.getElementById("clear-filters-btn");
@@ -1106,6 +1152,7 @@
         const resp = await fetch("/api/events?refresh=1");
         const data = await resp.json();
         allEvents = data.events;
+        indexSessionCounts();
         lastUpdatedEl.textContent = formatFetchedAt(data.fetched_at);
         render();
       } catch (err) {

@@ -14,7 +14,7 @@ from authlib.integrations.flask_client import OAuth
 from flask import Blueprint, redirect, url_for
 from flask_login import LoginManager, login_user, logout_user
 
-from models import User, db
+from models import User, db, utcnow
 
 login_manager = LoginManager()
 oauth = OAuth()
@@ -67,7 +67,7 @@ def google_callback():
     # so it both refreshes the activity clock and cancels any pending
     # deletion warning — the user came back, which is exactly what the
     # warning email was asking them to do.
-    user.last_seen_at = dt.datetime.utcnow()
+    user.last_seen_at = utcnow()
     user.deletion_warned_at = None
     db.session.commit()
 

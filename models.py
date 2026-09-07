@@ -9,6 +9,21 @@ from flask_sqlalchemy import SQLAlchemy
 
 db = SQLAlchemy()
 
+
+def utcnow() -> dt.datetime:
+    """The current UTC time, with no timezone attached.
+
+    datetime.utcnow() is deprecated, but its aware replacement cannot just
+    be dropped in. Every DateTime column below is naive (the database type
+    is TIMESTAMP WITHOUT TIME ZONE), so an aware value is stored with its
+    offset discarded and read back naive anyway — and subtracting a naive
+    value read from the database from an aware "now" raises TypeError. Rows
+    written before this existed are naive too. Stripping tzinfo keeps every
+    value that is stored or compared in the single form the schema uses, so
+    this is a drop-in replacement rather than a change of meaning.
+    """
+    return dt.datetime.now(dt.timezone.utc).replace(tzinfo=None)
+
 # Columns added to tables that already exist in a deployed database.
 # db.create_all() only creates missing *tables*, never missing columns, so
 # new fields on an existing model need an explicit (idempotent) migration.
@@ -64,7 +79,7 @@ class User(UserMixin, db.Model):
     email = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255))
     picture_url = db.Column(db.String(500))
-    created_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)
     # Opt-in: alerts go out by push unless the user also asks for email.
     email_alerts = db.Column(db.Boolean, nullable=False, default=False)
 
@@ -72,7 +87,7 @@ class User(UserMixin, db.Model):
     # authenticated requests. This is the only signal retention has: without
     # it "inactive" could only mean "signed up long ago", which would delete
     # people who use the app every week.
-    last_seen_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+    last_seen_at = db.Column(db.DateTime, default=utcnow)
     # When the "your account is about to be deleted" email went out. NULL
     # means no warning has been sent, and retention refuses to delete an
     # account that has not been warned — so a mail outage stalls deletion
@@ -160,7 +175,7 @@ class EventState(db.Model):
     course_id = db.Column(db.String(50), nullable=False)
     date = db.Column(db.String(10), nullable=False)  # ISO YYYY-MM-DD
     was_open = db.Column(db.Boolean, nullable=False, default=False)
-    updated_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=utcnow)
 
     __table_args__ = (
         db.UniqueConstraint(
@@ -179,7 +194,7 @@ class WatchRun(db.Model):
     __tablename__ = "watch_runs"
 
     id = db.Column(db.Integer, primary_key=True)
-    ran_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+    ran_at = db.Column(db.DateTime, default=utcnow)
     checked = db.Column(db.Integer, default=0)
     transitions = db.Column(db.Integer, default=0)
     notifications_sent = db.Column(db.Integer, default=0)
@@ -196,4 +211,4 @@ class PushSubscription(db.Model):
     endpoint = db.Column(db.String(500), unique=True, nullable=False)
     p256dh = db.Column(db.String(200), nullable=False)
     auth = db.Column(db.String(100), nullable=False)
-    created_at = db.Column(db.DateTime, default=dt.datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=utcnow)

@@ -47,7 +47,7 @@ import os
 import threading
 import time
 
-from models import WatchRun, db
+from models import WatchRun, db, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,7 @@ def seconds_since_last_run() -> float | None:
     run = db.session.get(WatchRun, 1)
     if run is None or run.ran_at is None:
         return None
-    return (dt.datetime.utcnow() - run.ran_at).total_seconds()
+    return (utcnow() - run.ran_at).total_seconds()
 
 
 def run_pass(fn):

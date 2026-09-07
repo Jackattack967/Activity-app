@@ -32,7 +32,7 @@ import logging
 import os
 
 import watcher
-from models import Favorite, Preference, PushSubscription, User, db
+from models import Favorite, Preference, PushSubscription, User, db, utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -85,7 +85,7 @@ def run(dry_run: bool | None = None) -> dict:
     if dry_run is None:
         dry_run = not is_armed()
 
-    now = dt.datetime.utcnow()
+    now = utcnow()
     warn_cutoff = now - dt.timedelta(days=INACTIVE_DAYS - WARN_DAYS)
     idle_cutoff = now - dt.timedelta(days=INACTIVE_DAYS)
     warned_cutoff = now - dt.timedelta(days=WARN_DAYS)

@@ -26,7 +26,7 @@ from urllib.parse import quote
 import requests
 from pywebpush import WebPushException, webpush
 
-from models import EventState, Favorite, PushSubscription, WatchRun, db
+from models import EventState, Favorite, PushSubscription, WatchRun, db, utcnow
 from tokens import make_unsubscribe_token
 
 logger = logging.getLogger(__name__)
@@ -479,7 +479,7 @@ def check_watches(events: list[dict]) -> dict:
 
         if state.was_open != open_now:
             state.was_open = open_now
-            state.updated_at = dt.datetime.utcnow()
+            state.updated_at = utcnow()
 
     # Occurrences in the past can never re-open; drop them so the table does
     # not grow without bound.
@@ -497,8 +497,8 @@ def check_watches(events: list[dict]) -> dict:
 
     # Heartbeat: a single row, overwritten each run, so the dashboard can show
     # whether the scheduler is actually calling us.
-    run = WatchRun.query.get(1) or WatchRun(id=1)
-    run.ran_at = dt.datetime.utcnow()
+    run = db.session.get(WatchRun, 1) or WatchRun(id=1)
+    run.ran_at = utcnow()
     run.checked = checked
     run.transitions = transitions
     run.notifications_sent = notifications

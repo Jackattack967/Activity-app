@@ -359,5 +359,45 @@ check(
 )
 
 
+print("\n14. AVAILABILITY HAS THREE ANSWERS, NOT TWO")
+# These four statuses are the complete set the configured portals actually
+# produced when this was written (801 sessions across five cities).
+#
+# "More Info" is the important one: 212 of those 801 carried it, with no
+# spot count at all — most of Coquitlam's and New Westminster's drop-in
+# skating and swimming. It means the portal publishes no capacity for that
+# session, which is not the same as the session being full.
+#
+# The front end therefore asks two different questions of the same event.
+# "Is it full?" drives the Hide-full-sessions filter, and unknown capacity
+# is not full, so those sessions stay on the page. "Is it open?" drives the
+# alerts below, and unknown capacity is not a spot opening up, so it never
+# fires one. Collapsing the two is what made that filter hide a quarter of
+# the schedule.
+import watcher
+
+for spots, status, want, why in [
+    ("4 spots left", "Register", True, "a real count"),
+    ("1 spot left", "Register", True, "singular count"),
+    ("Full", "Full", False, "explicitly full"),
+    ("", "Register", True, "no count, but registration is open"),
+    ("", "Closed", False, "explicitly closed"),
+    ("", "More Info", False, "capacity unknown - cannot be an opening"),
+    ("", "", False, "nothing known at all"),
+]:
+    got = watcher.is_open({"spots": spots, "status": status})
+    check(f"{why}: spots={spots!r} status={status!r}", got, want)
+
+# A watch can only fire on a transition into open. Unknown-capacity
+# sessions never report open, so a star on one can never alert — that is a
+# limitation of the portal's data, and the test exists to record it rather
+# than to have it rediscovered as a bug.
+check(
+    "an unknown-capacity session never looks open",
+    any(watcher.is_open({"spots": "", "status": "More Info"}) for _ in range(3)),
+    False,
+)
+
+
 print("\n" + ("ALL PASSED" if not FAIL else f"FAILURES: {FAIL}"))
 sys.exit(1 if FAIL else 0)

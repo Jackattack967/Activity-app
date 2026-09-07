@@ -20,7 +20,7 @@ os.environ["AUTOWATCH_INITIAL_DELAY_SECONDS"] = "0"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from flask import Flask
-from models import WatchRun, db
+from models import WatchRun, db, utcnow
 import autowatch
 
 app = Flask(__name__)
@@ -40,7 +40,7 @@ def check(label, got, want):
 def set_heartbeat(seconds_ago):
     """Pretend a pass ran this many seconds ago, by any caller."""
     run = db.session.get(WatchRun, 1) or WatchRun(id=1)
-    run.ran_at = dt.datetime.utcnow() - dt.timedelta(seconds=seconds_ago)
+    run.ran_at = utcnow() - dt.timedelta(seconds=seconds_ago)
     db.session.add(run)
     db.session.commit()
 

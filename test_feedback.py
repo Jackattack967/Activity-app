@@ -18,6 +18,8 @@ import os
 import sys
 import types
 
+from models import utcnow
+
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 FAIL = []
@@ -50,7 +52,11 @@ def load_from_app(*names):
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.target.id in names:
             wanted.append(node)
     module = types.ModuleType("app_shim")
-    module.__dict__.update(dt=dt, threading=__import__("threading"))
+    # _feedback_allowed calls utcnow(); the shim gets no imports of its
+    # own, so anything the lifted code names has to be put here.
+    from models import utcnow
+
+    module.__dict__.update(dt=dt, threading=__import__("threading"), utcnow=utcnow)
     exec(compile(ast.Module(wanted, []), "<app_shim>", "exec"), module.__dict__)
     return module
 
@@ -86,7 +92,7 @@ for _ in range(shim._FEEDBACK_MAX_PER_SENDER):
     shim._feedback_allowed("9.9.9.9")
 check("blocked while the window is open", shim._feedback_allowed("9.9.9.9"), False)
 # Rewind the recorded times past the window rather than sleeping an hour.
-old = dt.datetime.utcnow() - shim._FEEDBACK_WINDOW - dt.timedelta(minutes=1)
+old = utcnow() - shim._FEEDBACK_WINDOW - dt.timedelta(minutes=1)
 shim._feedback_log[:] = [(old, who) for _, who in shim._feedback_log]
 check("allowed again once they age out", shim._feedback_allowed("9.9.9.9"), True)
 

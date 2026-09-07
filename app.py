@@ -36,6 +36,7 @@ from models import (
     WatchRun,
     db,
     ensure_schema,
+    utcnow,
 )
 from tokens import read_unsubscribe_token
 
@@ -215,7 +216,7 @@ def _touch_last_seen() -> None:
         return
     try:
         user = current_user._get_current_object()
-        now = dt.datetime.utcnow()
+        now = utcnow()
         if user.last_seen_at is not None and now - user.last_seen_at < _LAST_SEEN_REFRESH:
             return
         user.last_seen_at = now
@@ -433,11 +434,12 @@ def api_watch_status():
     if not ACCOUNTS_ENABLED:
         return jsonify({"configured": False, "last_run": None, **channels})
 
-    run = WatchRun.query.get(1)
+    # Model.query.get() is the removed-in-2.0 legacy API.
+    run = db.session.get(WatchRun, 1)
     if run is None or run.ran_at is None:
         return jsonify({"configured": True, "last_run": None, **channels})
 
-    age = (dt.datetime.utcnow() - run.ran_at).total_seconds()
+    age = (utcnow() - run.ran_at).total_seconds()
     return jsonify(
         {
             "configured": True,
@@ -538,7 +540,7 @@ _feedback_log: list[tuple[dt.datetime, str]] = []
 
 
 def _feedback_allowed(sender: str) -> bool:
-    now = dt.datetime.utcnow()
+    now = utcnow()
     with _feedback_lock:
         cutoff = now - _FEEDBACK_WINDOW
         _feedback_log[:] = [entry for entry in _feedback_log if entry[0] > cutoff]
@@ -580,7 +582,7 @@ def api_feedback():
         )
 
     context = (
-        f"Sent {dt.datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC · "
+        f"Sent {utcnow().strftime('%Y-%m-%d %H:%M')} UTC · "
         f"{'signed in' if _is_logged_in() else 'not signed in'}"
     )
     if watcher.send_feedback(message, kind, reply_to, context):
