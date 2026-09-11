@@ -4,11 +4,13 @@ Scrapes public drop-in activity schedules (skating, swimming, sports,
 fitness, golf) from municipal recreation portals and shows them in one
 unified, filterable dashboard.
 
-Currently configured for **Coquitlam**, **Port Coquitlam**, **Port Moody**,
-**New Westminster**, **Burnaby** and **West Vancouver**. The first five were
-measured at around 790 sessions across 24 venues over a 14-day window; West
-Vancouver is new and has not been counted. See [`config.py`](config.py) for
-how to add a calendar or a city.
+Currently configured for **Vancouver**, **Coquitlam**, **Port Coquitlam**,
+**Port Moody**, **New Westminster**, **Burnaby** and **West Vancouver** — 74
+sources across 77 venues. The five original cities were measured at around
+790 sessions over a 14-day window; Vancouver and West Vancouver are new and
+have not been counted. See [`config.py`](config.py) for how to add a calendar
+or a city, and run [`check_sources.py`](check_sources.py) to see what a city
+is actually returning.
 
 Cities don't all run the same booking software, so the scraper is split by
 platform: [`scraper.py`](scraper.py) picks a module per source, and
@@ -103,6 +105,17 @@ The ids themselves come out of the portal in a browser — no scripts, no
 account. [`docs/collecting-portal-ids.md`](docs/collecting-portal-ids.md)
 walks through it click by click for both platforms.
 
+Then check the result, because bad ids don't raise — they return nothing,
+and a source that returns nothing is indistinguishable from a quiet city:
+
+```bash
+python check_sources.py vancouver
+```
+
+It fetches live and prints what each source gave back, which sources gave
+back nothing, and a sample of the names — the last of those being how you
+tell a filter that is pulling in registered courses from one that isn't.
+
 A third booking platform (RecTrac, Amilia, Xplor, etc.) needs its own
 module, since each has a different API shape. Write one exposing
 `fetch_calendar_events()` and `build_login_url()`, then list it in
@@ -117,8 +130,7 @@ so most neighbours are reachable with config alone:
 | --- | --- | --- |
 | Coquitlam, Port Moody, New Westminster | PerfectMind | configured |
 | Port Coquitlam, Burnaby | ActiveNet | configured |
-| West Vancouver | ActiveNet | configured |
-| Vancouver (Park Board) | ActiveNet | `anc.ca.apm.activecommunities.com/vancouver` |
+| Vancouver (Park Board), West Vancouver | ActiveNet | configured |
 | Richmond | PerfectMind | `richmondcity.perfectmind.com/23650/Clients` |
 | North Vancouver (NVRC, city + district) | PerfectMind | `nvrc.perfectmind.com/23734/Clients` |
 | Maple Ridge, Delta, White Rock, Surrey | PerfectMind | not yet configured |
@@ -126,6 +138,11 @@ so most neighbours are reachable with config alone:
 Richmond also keeps an ActiveNet tenant (`cityofrichmond`) alongside its
 PerfectMind one; its own website links to PerfectMind, so that's the one to
 read.
+
+Vancouver publishes no activity "types", so unlike West Vancouver there is
+no drop-in axis to filter on — only four broad categories that carry
+registered courses alongside drop-ins. Its sources are deliberately the wide
+version until `check_sources.py` says what a narrower rule should be.
 
 Burnaby is configured for golf only, which is the one activity no other
 city here publishes. Its pools, rinks and gyms are on the same ActiveNet

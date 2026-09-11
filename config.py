@@ -316,6 +316,93 @@ SOURCES = [
             ("29", "West Vancouver Youth Hub", ("Youth Hub",)),
         )
     ),
+    # City of Vancouver (Park Board), on ActiveNet. Forty-six buildings —
+    # more venues than every other city here put together.
+    #
+    # Unlike West Vancouver, Vancouver publishes no activity "types", so
+    # there is no drop-in axis to filter on: its filters endpoint returns
+    # an empty types list even on a warmed session. All that is left to
+    # narrow by is the four categories below, which are broad enough to
+    # carry registered courses as well as drop-ins.
+    #
+    # So this is deliberately the wide version, and check_sources.py is how
+    # it gets narrowed: run it against Vancouver, look at what actually
+    # comes back, and add the rule the real data justifies. Guessing a rule
+    # from here would be worse than not having one — a guess that excludes
+    # too much fails silently, and "this centre published nothing today" is
+    # indistinguishable from "the filter is wrong".
+    #
+    # The pools and rinks are separate buildings from the community centres
+    # they sit beside (Britannia is a centre, a pool and a rink), which is
+    # how the portal lists them and how they map. Several of the pools are
+    # outdoor and summer-only, so they are empty most of the year — that is
+    # the portal being accurate, not the scrape failing.
+    #
+    # Left out: "Vancouver Park Board Recreation Services", which is the
+    # administrative catch-all rather than a building, so it has no address
+    # and nothing to put on a map.
+    *(
+        {
+            "source_name": "City of Vancouver",
+            "platform": "activenet",
+            "base_url": "https://anc.ca.apm.activecommunities.com",
+            "org_path": "vancouver",
+            "center_id": center_id,
+            "location": location,
+            # Aquatics, Skating, Sports, Fitness & Health.
+            "category_ids": ["23", "24", "27", "28"],
+            "calendar_label": f"Drop-in — {location}",
+            "activity_type": "Other",
+        }
+        for center_id, location in (
+            ("38", "Britannia Community Centre"),
+            ("37", "Britannia Pool"),
+            ("24", "Britannia Rink"),
+            ("57", "Champlain Heights Community Centre"),
+            ("6", "Coal Harbour Community Centre"),
+            ("29", "Creekside Community Recreation Centre"),
+            ("48", "Douglas Park Community Centre"),
+            ("50", "Dunbar Community Centre"),
+            ("43", "False Creek Community Centre"),
+            ("44", "Hastings Community Centre"),
+            ("59", "Hillcrest Aquatic Centre"),
+            ("39", "Hillcrest Community Centre"),
+            ("22", "Hillcrest Rink"),
+            ("55", "Kensington Community Centre"),
+            ("56", "Kensington Pool"),
+            ("33", "Kerrisdale Community Centre"),
+            ("23", "Kerrisdale Cyclone Taylor Arena"),
+            ("34", "Kerrisdale Pool"),
+            ("35", "Killarney Community Centre"),
+            ("36", "Killarney Pool"),
+            ("25", "Killarney Rink"),
+            ("40", "Kitsilano Community Centre"),
+            ("3", "Kitsilano Pool"),
+            ("26", "Kitsilano Rink"),
+            ("10", "Lord Byng Pool"),
+            ("275", "Maple Grove Park Pool"),
+            ("54", "Marpole-Oakridge Community Centre"),
+            ("288", "Moberly Arts and Cultural Centre"),
+            ("53", "Mount Pleasant Community Centre"),
+            ("5", "New Brighton Pool"),
+            ("60", "RayCam Co-operative Centre"),
+            ("46", "Renfrew Park Community Centre"),
+            ("47", "Renfrew Park Pool"),
+            ("42", "Roundhouse Community Arts and Recreation Centre"),
+            ("51", "Strathcona Community Centre"),
+            ("41", "Sunset Community Centre"),
+            ("27", "Sunset Rink"),
+            ("45", "Templeton Park Pool"),
+            ("58", "Thunderbird Community Centre"),
+            ("32", "Trout Lake Community Centre"),
+            ("28", "Trout Lake Rink"),
+            ("2", "Vancouver Aquatic Centre"),
+            ("7", "West End Community Centre"),
+            ("9", "West End Rink"),
+            ("49", "West Point Grey Community Centre - Aberthau"),
+            ("67", "West Point Grey Community Centre - Jericho Hill"),
+        )
+    ),
 ]
 
 # How many days ahead to pull the schedule for.
@@ -424,6 +511,53 @@ VENUES_AWAITING_COORDS = frozenset(
         "Gleneagles Golf Course",
         "West Vancouver Seniors' Activity Centre",
         "West Vancouver Youth Hub",
+        # City of Vancouver
+        "Britannia Community Centre",
+        "Britannia Pool",
+        "Britannia Rink",
+        "Champlain Heights Community Centre",
+        "Coal Harbour Community Centre",
+        "Creekside Community Recreation Centre",
+        "Douglas Park Community Centre",
+        "Dunbar Community Centre",
+        "False Creek Community Centre",
+        "Hastings Community Centre",
+        "Hillcrest Aquatic Centre",
+        "Hillcrest Community Centre",
+        "Hillcrest Rink",
+        "Kensington Community Centre",
+        "Kensington Pool",
+        "Kerrisdale Community Centre",
+        "Kerrisdale Cyclone Taylor Arena",
+        "Kerrisdale Pool",
+        "Killarney Community Centre",
+        "Killarney Pool",
+        "Killarney Rink",
+        "Kitsilano Community Centre",
+        "Kitsilano Pool",
+        "Kitsilano Rink",
+        "Lord Byng Pool",
+        "Maple Grove Park Pool",
+        "Marpole-Oakridge Community Centre",
+        "Moberly Arts and Cultural Centre",
+        "Mount Pleasant Community Centre",
+        "New Brighton Pool",
+        "RayCam Co-operative Centre",
+        "Renfrew Park Community Centre",
+        "Renfrew Park Pool",
+        "Roundhouse Community Arts and Recreation Centre",
+        "Strathcona Community Centre",
+        "Sunset Community Centre",
+        "Sunset Rink",
+        "Templeton Park Pool",
+        "Thunderbird Community Centre",
+        "Trout Lake Community Centre",
+        "Trout Lake Rink",
+        "Vancouver Aquatic Centre",
+        "West End Community Centre",
+        "West End Rink",
+        "West Point Grey Community Centre - Aberthau",
+        "West Point Grey Community Centre - Jericho Hill",
     }
 )
 
@@ -444,6 +578,7 @@ AREAS = (
     {"name": "New Westminster", "cities": ("City of New Westminster",)},
     {"name": "Burnaby", "cities": ("City of Burnaby",)},
     {"name": "West Vancouver", "cities": ("District of West Vancouver",)},
+    {"name": "Vancouver", "cities": ("City of Vancouver",)},
 )
 
 # Built once at import: {source_name -> area name}, so annotating an event
