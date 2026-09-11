@@ -97,6 +97,10 @@ Then add the city to `AREAS` and its venues to `FACILITY_COORDS`, both in
 coordinates simply gets no map pin, and a city with no area shows only under
 "All areas".
 
+The ids themselves come out of the portal in a browser — no scripts, no
+account. [`docs/collecting-portal-ids.md`](docs/collecting-portal-ids.md)
+walks through it click by click for both platforms.
+
 A third booking platform (RecTrac, Amilia, Xplor, etc.) needs its own
 module, since each has a different API shape. Write one exposing
 `fetch_calendar_events()` and `build_login_url()`, then list it in
@@ -104,10 +108,22 @@ module, since each has a different API shape. Write one exposing
 
 ### Which cities are on what
 
-Not every neighbour is reachable. Metro Vancouver PerfectMind tenants exist
-for Coquitlam, Port Moody, New Westminster, Maple Ridge, Delta, White Rock,
-Surrey and North Vancouver (NVRC). Port Coquitlam and Burnaby are on
-ActiveNet. Vancouver and Richmond are on neither.
+Metro Vancouver is split between the two platforms this app already speaks,
+so most neighbours are reachable with config alone:
+
+| City | Platform | Portal |
+| --- | --- | --- |
+| Coquitlam, Port Moody, New Westminster | PerfectMind | configured |
+| Port Coquitlam, Burnaby | ActiveNet | configured |
+| Vancouver (Park Board) | ActiveNet | `anc.ca.apm.activecommunities.com/vancouver` |
+| West Vancouver | ActiveNet | `anc.ca.apm.activecommunities.com/westvanrec` |
+| Richmond | PerfectMind | `richmondcity.perfectmind.com/23650/Clients` |
+| North Vancouver (NVRC, city + district) | PerfectMind | `nvrc.perfectmind.com/23734/Clients` |
+| Maple Ridge, Delta, White Rock, Surrey | PerfectMind | not yet configured |
+
+Richmond also keeps an ActiveNet tenant (`cityofrichmond`) alongside its
+PerfectMind one; its own website links to PerfectMind, so that's the one to
+read.
 
 Burnaby is configured for golf only, which is the one activity no other
 city here publishes. Its pools, rinks and gyms are on the same ActiveNet
