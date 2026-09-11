@@ -6,7 +6,7 @@ unified, filterable dashboard.
 
 Currently configured for **Vancouver**, **Coquitlam**, **Port Coquitlam**,
 **Port Moody**, **New Westminster**, **Burnaby** and **West Vancouver** — 74
-sources across 77 venues. The five original cities were measured at around
+sources across 78 known venues. The five original cities were measured at around
 790 sessions over a 14-day window; Vancouver and West Vancouver are new and
 have not been counted. See [`config.py`](config.py) for how to add a calendar
 or a city, and run [`check_sources.py`](check_sources.py) to see what a city
