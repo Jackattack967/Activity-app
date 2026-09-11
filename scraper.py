@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import config
 import scraper_activenet
 import scraper_perfectmind
 
@@ -66,7 +67,8 @@ def fetch_all_events(sources: list[dict], days_ahead: int) -> tuple[list[Event],
     all_events: list[Event] = []
     errors: list[str] = []
 
-    with ThreadPoolExecutor(max_workers=min(len(sources), 8) or 1) as pool:
+    workers = min(len(sources), config.SCRAPE_MAX_WORKERS) or 1
+    with ThreadPoolExecutor(max_workers=workers) as pool:
         future_to_source = {
             pool.submit(fetch_calendar_events, source, days_ahead): source
             for source in sources

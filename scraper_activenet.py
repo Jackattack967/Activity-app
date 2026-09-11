@@ -25,6 +25,7 @@ rest of the app never has to know which portal an event came from:
 from __future__ import annotations
 
 import datetime as dt
+import html
 import json
 import logging
 import re
@@ -66,8 +67,12 @@ _WEEKDAYS = {
 #
 # Each city names its own categories, so this is keyed by the exact text a
 # city publishes, and two cities need not agree: Port Coquitlam prefixes
-# everything "Drop-in - ", Burnaby does not. A category that is missing
-# here is not an error — the source's own "activity_type" is used instead.
+# everything "Drop-in - ", Burnaby does not, West Vancouver uses a
+# "Group: Specific" form. A category that is missing here is not an error —
+# the source's own "activity_type" is used instead.
+#
+# Keys are compared after HTML-unescaping, because some portals publish the
+# name entity-encoded ("Fitness &amp; Health") and others don't.
 CATEGORY_ACTIVITY_TYPES = {
     # City of Port Coquitlam
     "Drop-in - Aquatics": "Swimming",
@@ -79,6 +84,46 @@ CATEGORY_ACTIVITY_TYPES = {
     "Drop-in - Seniors": "Adult",
     # City of Burnaby
     "Golf": "Golf",
+    # District of West Vancouver. Its categories are not drop-in-specific —
+    # the source filters on the portal's "Daily Activities and Drop-Ins"
+    # type instead — so the swim-lesson and hockey-lesson categories are
+    # mapped too: a lesson that is genuinely droppable-into still belongs
+    # under the sport it teaches.
+    "Skating: Public Skate": "Skating",
+    "Skating: Drop-in Hockey": "Skating",
+    "Skating: Stick and Puck": "Skating",
+    "Skating: Skate Lessons": "Skating",
+    "Skating: Hockey Lessons": "Skating",
+    "Swimming: Aquafit": "Swimming",
+    "Swimming: Masters Swim": "Swimming",
+    "Swimming: Swim Lessons": "Swimming",
+    "Health and Fitness: Group Fitness": "Fitness",
+    "Health and Fitness: Group Fitness Plus": "Fitness",
+    "Health and Fitness: CycleFit": "Fitness",
+    "Health and Fitness: Mind Body Wellness": "Fitness",
+    "Health and Fitness: Pilates": "Fitness",
+    "Health and Fitness: Yoga": "Fitness",
+    "Health and Fitness: Active Rehab": "Fitness",
+    "Gymnastics: Gymnastics Drop-ins": "All Ages",
+    "Sports: Badminton": "Badminton",
+    "Sports: Basketball": "Basketball",
+    "Sports: Pickleball": "Pickleball",
+    "Sports: Table Tennis": "Table Tennis",
+    "Sports: Volleyball": "Volleyball",
+    "Sports: Soccer": "Soccer",
+    "Sports: Tennis": "Sports",
+    "Sports: Fencing": "Sports",
+    "Sports: Martial Arts": "Sports",
+    "Sports: Outdoor Rec": "Sports",
+    "Sports: General": "Sports",
+    "Sports: Golf": "Golf",
+    # City of Vancouver. Broad categories, and the only ones here that a
+    # portal publishes HTML-escaped — "Fitness &amp; Health" is how it
+    # arrives, which is why the lookup unescapes first.
+    "Aquatics": "Swimming",
+    "Skating": "Skating",
+    "Fitness & Health": "Fitness",
+    "Sports": "Sports",
 }
 
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -86,6 +131,17 @@ _TAG_RE = re.compile(r"<[^>]+>")
 # Some rooms are booked under an internal label ("Program Location: Arena 3
 # (Purple)") where the prefix is scheduling bookkeeping, not a place name.
 _PROGRAM_LOCATION_RE = re.compile(r"^\s*program location:\s*", re.I)
+
+# Some portals prefix a building with a bullet character to sort it to the
+# top of their own picker ("*Britannia Community Centre"). That is display
+# bookkeeping, not part of the name, so it is ignored when deciding whether
+# a row's label is just repeating the building it is already filtered to.
+_DECORATION_RE = re.compile(r"^[\s*•\-]+")
+
+
+def _venue_key(name: str) -> str:
+    """A building name reduced to what actually identifies it."""
+    return _DECORATION_RE.sub("", name or "").strip().casefold()
 
 
 def _build_session() -> requests.Session:
@@ -144,6 +200,7 @@ def _search_page(
             "date_after": date_from.isoformat(),
             "date_before": date_to.isoformat(),
             "activity_category_ids": list(source.get("category_ids", [])),
+            "activity_type_ids": list(source.get("type_ids", [])),
             "center_ids": [source["center_id"]] if source.get("center_id") else [],
         },
         "activity_transfer_pattern": {},
@@ -276,14 +333,15 @@ def _normalize(raw: dict, source: dict, day: dt.date) -> Event:
     room = ((raw.get("location") or {}).get("label") or "").strip()
     room = _PROGRAM_LOCATION_RE.sub("", room).strip()
     location = source["location"]
-    if room.casefold() in {
-        alias.casefold() for alias in (location, *source.get("center_aliases", ()))
+    if _venue_key(room) in {
+        _venue_key(alias) for alias in (location, *source.get("center_aliases", ()))
     }:
         room = ""
 
     event_name = (raw.get("name") or "").strip()
     fallback = CATEGORY_ACTIVITY_TYPES.get(
-        (raw.get("category") or "").strip(), source.get("activity_type", "Other")
+        html.unescape((raw.get("category") or "").strip()),
+        source.get("activity_type", "Other"),
     )
 
     return Event(

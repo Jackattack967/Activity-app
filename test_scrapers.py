@@ -9,6 +9,7 @@ turns a portal's wording into an Event can be checked without hitting a
 city's servers or depending on what happens to be scheduled today.
 """
 import datetime as dt
+import json
 import os
 import re
 import sys
@@ -286,16 +287,33 @@ print("\n11. EVERY ACTIVENET VENUE CAN BE PUT ON THE MAP")
 # from the portal, so a typo there is invisible: the events still arrive and
 # only the map marker quietly goes missing. PerfectMind sources are not
 # checked here, because they learn their venue names by scraping.
+#
+# A venue may legitimately have no coordinates yet — it simply gets no pin —
+# but it has to say so in VENUES_AWAITING_COORDS. That is the whole point:
+# an unmapped venue and a mistyped one look identical on the map, so the
+# deliberate one is the one that is written down.
+_activenet_venues = {
+    s["location"] for s in config.SOURCES if s.get("platform") == "activenet"
+}
 check(
-    "no ActiveNet venue is missing coordinates",
+    "every ActiveNet venue is either mapped or declared unmapped",
     sorted(
-        {
-            s["location"]
-            for s in config.SOURCES
-            if s.get("platform") == "activenet"
-            and s["location"] not in config.FACILITY_COORDS
-        }
+        _activenet_venues
+        - set(config.FACILITY_COORDS)
+        - config.VENUES_AWAITING_COORDS
     ),
+    [],
+)
+# The other direction: an entry left behind here after its coordinates land,
+# or a name that no source uses, would quietly re-open the gap this closes.
+check(
+    "nothing is both mapped and declared unmapped",
+    sorted(config.VENUES_AWAITING_COORDS & set(config.FACILITY_COORDS)),
+    [],
+)
+check(
+    "no stale names are declared unmapped",
+    sorted(config.VENUES_AWAITING_COORDS - _activenet_venues),
     [],
 )
 
@@ -444,6 +462,131 @@ ev = an._normalize(
 check("the scraper stamps it onto the event", ev.cancelled, True)
 ev = an._normalize(golf_row, GOLF_SOURCE, dt.date(2026, 9, 12))
 check("and leaves an ordinary session alone", ev.cancelled, False)
+
+
+print("\n16. A DROP-IN-ONLY SEARCH IS SENT WHEN THE PORTAL OFFERS ONE")
+# West Vancouver's categories name the subject, not whether you can turn up
+# ("Skating: Public Skate" and "Skating: Skate Lessons" are siblings), so
+# its sources filter on the portal's separate "Daily Activities and
+# Drop-Ins" type instead. If that filter stops being sent, the dashboard
+# fills up with ten-week registered courses nobody can drop into — which
+# looks like a busy city, not like a bug.
+_sent = {}
+
+
+class _FakeResponse:
+    @staticmethod
+    def raise_for_status():
+        return None
+
+    @staticmethod
+    def json():
+        return {"body": {"activity_items": []}, "headers": {"page_info": {"total_page": 1}}}
+
+
+class _FakeSession:
+    def post(self, url, headers=None, data=None, timeout=None):
+        _sent.update(json.loads(data)["activity_search_pattern"])
+        return _FakeResponse()
+
+
+WESTVAN_SOURCE = next(
+    s for s in config.SOURCES if s["source_name"] == "District of West Vancouver"
+)
+an._search_page(
+    _FakeSession(), WESTVAN_SOURCE, dt.date(2026, 9, 11), dt.date(2026, 9, 25), 1
+)
+check("the drop-in type filter reaches the portal", _sent.get("activity_type_ids"), ["6"])
+check("and the building filter still does", _sent.get("center_ids"), [WESTVAN_SOURCE["center_id"]])
+
+# Port Coquitlam narrows by category instead and names no type. Sending an
+# empty list there is what keeps its search as wide as it has always been.
+POCO_SOURCE = next(
+    s for s in config.SOURCES if s["source_name"] == "City of Port Coquitlam"
+)
+an._search_page(_FakeSession(), POCO_SOURCE, dt.date(2026, 9, 11), dt.date(2026, 9, 25), 1)
+check("a source with no type filter still sends the key", _sent.get("activity_type_ids"), [])
+check(
+    "and keeps its categories",
+    _sent.get("activity_category_ids"),
+    POCO_SOURCE["category_ids"],
+)
+
+# Every West Vancouver source has to carry the filter, not just the first.
+check(
+    "no West Vancouver building is left unfiltered",
+    sorted(
+        s["location"]
+        for s in config.SOURCES
+        if s["source_name"] == "District of West Vancouver" and not s.get("type_ids")
+    ),
+    [],
+)
+
+print("\n17. A PORTAL'S OWN SPELLING IS NOT THE DASHBOARD'S")
+# Two things each portal does to names that would otherwise leak onto cards.
+
+# Vancouver sorts its buildings with a leading bullet. That is display
+# bookkeeping inside their picker, so a row labelled with it is still just
+# repeating the building it was already filtered to.
+STARRED = {**WESTVAN_SOURCE, "location": "Britannia Community Centre"}
+ev = an._normalize(
+    {**row, "location": {"label": "*Britannia Community Centre"}},
+    STARRED,
+    dt.date(2026, 9, 11),
+)
+check("a bulleted building name still collapses", ev.facility, "Britannia Community Centre")
+
+# West Vancouver's own names for two buildings are bare — "Aquatic Centre"
+# belongs to nobody on a dashboard spanning nine cities — so config renames
+# them and keeps the portal's spelling as an alias.
+ev = an._normalize(
+    {**row, "location": {"label": "Aquatic Centre"}},
+    next(
+        s
+        for s in config.SOURCES
+        if s.get("location") == "West Vancouver Aquatic Centre"
+    ),
+    dt.date(2026, 9, 11),
+)
+check("the portal's bare name collapses to the full one", ev.facility, "West Vancouver Aquatic Centre")
+
+# Categories arrive HTML-escaped from some portals and plain from others.
+# Matching the escaped form would drop every Vancouver fitness session to
+# the "Other" chip.
+ev = an._normalize(
+    {**row, "name": "Open Gym", "category": "Sports: Table Tennis"},
+    WESTVAN_SOURCE,
+    dt.date(2026, 9, 11),
+)
+check("a West Vancouver category maps to a known type", ev.activity_type, "Table Tennis")
+for written, want in [
+    ("Health and Fitness: Group Fitness", "Fitness"),
+    ("Skating: Public Skate", "Skating"),
+    ("Swimming: Aquafit", "Swimming"),
+    ("Sports: Golf", "Golf"),
+    ("Gymnastics: Gymnastics Drop-ins", "All Ages"),
+]:
+    ev = an._normalize(
+        {**row, "name": "Open Session", "category": written},
+        WESTVAN_SOURCE,
+        dt.date(2026, 9, 11),
+    )
+    check(f"{written!r}", ev.activity_type, want)
+# Vancouver publishes its category entity-encoded. Matching the escaped
+# text would send every Vancouver fitness session to the "Other" chip.
+ev = an._normalize(
+    {**row, "name": "Open Session", "category": "Fitness &amp; Health"},
+    {**WESTVAN_SOURCE, "activity_type": "Other"},
+    dt.date(2026, 9, 11),
+)
+check("an escaped category is unescaped before lookup", ev.activity_type, "Fitness")
+ev = an._normalize(
+    {**row, "name": "Open Session", "category": "Fitness & Health"},
+    {**WESTVAN_SOURCE, "activity_type": "Other"},
+    dt.date(2026, 9, 11),
+)
+check("and the plain spelling still works", ev.activity_type, "Fitness")
 
 
 print("\n" + ("ALL PASSED" if not FAIL else f"FAILURES: {FAIL}"))

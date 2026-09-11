@@ -5,8 +5,10 @@ fitness, golf) from municipal recreation portals and shows them in one
 unified, filterable dashboard.
 
 Currently configured for **Coquitlam**, **Port Coquitlam**, **Port Moody**,
-**New Westminster** and **Burnaby** — around 790 sessions across 24 venues
-over the next 14 days. See [`config.py`](config.py) for how to add a calendar or a city.
+**New Westminster**, **Burnaby** and **West Vancouver**. The first five were
+measured at around 790 sessions across 24 venues over a 14-day window; West
+Vancouver is new and has not been counted. See [`config.py`](config.py) for
+how to add a calendar or a city.
 
 Cities don't all run the same booking software, so the scraper is split by
 platform: [`scraper.py`](scraper.py) picks a module per source, and
@@ -115,8 +117,8 @@ so most neighbours are reachable with config alone:
 | --- | --- | --- |
 | Coquitlam, Port Moody, New Westminster | PerfectMind | configured |
 | Port Coquitlam, Burnaby | ActiveNet | configured |
+| West Vancouver | ActiveNet | configured |
 | Vancouver (Park Board) | ActiveNet | `anc.ca.apm.activecommunities.com/vancouver` |
-| West Vancouver | ActiveNet | `anc.ca.apm.activecommunities.com/westvanrec` |
 | Richmond | PerfectMind | `richmondcity.perfectmind.com/23650/Clients` |
 | North Vancouver (NVRC, city + district) | PerfectMind | `nvrc.perfectmind.com/23734/Clients` |
 | Maple Ridge, Delta, White Rock, Surrey | PerfectMind | not yet configured |
@@ -133,12 +135,14 @@ dashboard, so they are left out until they are actually wanted.
 ### Golf, and what is missing from it
 
 Golf comes from Burnaby's two municipal courses, Burnaby Mountain and
-Riverway, and it is **lessons and clinics, not tee times**. Those are real
+Riverway, and — since West Vancouver was added — from Gleneagles, whichever
+of its golf programs the portal publishes as drop-ins. It is **lessons and
+clinics, not tee times**. Those are real
 bookable sessions with real remaining-spot counts, which is what a watch
 needs in order to tell you a place has opened up.
 
-Booking a plain round is a different system. Both Burnaby and Vancouver run
-their tee sheets on CPS Golf (`golfburnaby.cps.golf`, `golfvancouver.cps.golf`),
+Booking a plain round is a different system, at every course here. Both
+Burnaby and Vancouver run their tee sheets on CPS Golf (`golfburnaby.cps.golf`, `golfvancouver.cps.golf`),
 which answers every automated request with an HTTP 403 from Cloudflare.
 Getting around that would mean defeating bot protection the vendor has
 deliberately turned on, so this app doesn't read tee times at all — use the

@@ -6,10 +6,11 @@
 #
 #   "perfectmind" — Coquitlam, Port Moody, New Westminster. Keys: base_url,
 #       org_path, widget_id, calendar_id. One entry per calendar.
-#   "activenet"   — Port Coquitlam, Burnaby. Keys: base_url, org_path,
-#       center_id, category_ids, location. One entry per *building*, because
-#       ActiveNet searches are filtered by building rather than by calendar.
-#       See scraper_activenet.py for why the building name is configured here.
+#   "activenet"   — Port Coquitlam, Burnaby, West Vancouver. Keys: base_url,
+#       org_path, center_id, location, and one or both of category_ids and
+#       type_ids. One entry per *building*, because ActiveNet searches are
+#       filtered by building rather than by calendar. See
+#       scraper_activenet.py for why the building name is configured here.
 #
 # A source with no "platform" is treated as PerfectMind, which is what every
 # source was before the second platform existed.
@@ -34,9 +35,22 @@
 #   1. Open the city's registration portal; it redirects to
 #        https://anc.ca.apm.activecommunities.com/<org_path>/home
 #   2. GET /<org_path>/rest/activities/filters?locale=en-US — public JSON
-#      listing every "center" (building) and "category" with their ids.
-#   3. Add one entry per building you care about, with the drop-in category
-#      ids you want and the building's proper name as "location".
+#      listing every "center" (building), "category" and "type" with their
+#      ids. Load the home page first: the endpoint answers blank for a
+#      caller it has not seen before.
+#   3. Add one entry per building you care about, with the building's proper
+#      name as "location" and whichever of these narrows the search best:
+#        category_ids — for portals whose categories are themselves drop-in
+#          ("Drop-in - Aquatics"), as Port Coquitlam's are.
+#        type_ids     — for portals that keep drop-ins on a separate axis
+#          ("Daily Activities and Drop-Ins"), as West Vancouver does. This
+#          is the better filter where it exists: it is the portal's own
+#          answer to "what can I just turn up to", so registered courses
+#          stay out without having to name every category by hand.
+#      Either may be omitted; omitting both fetches everything the building
+#      publishes, which is rarely what you want.
+#
+# docs/collecting-portal-ids.md walks through both platforms click by click.
 #
 # "timezone" is optional per source (IANA name, e.g. "America/Vancouver") and
 # defaults to America/Vancouver if omitted — it's used to compute "today" for
@@ -252,6 +266,56 @@ SOURCES = [
             ("34", "Riverway Golf Course"),
         )
     ),
+    # District of West Vancouver, on ActiveNet.
+    #
+    # Filtered by type rather than by category. West Vancouver's categories
+    # describe the subject ("Skating: Public Skate", "Sports: Badminton")
+    # and say nothing about whether a thing is droppable-into, so naming
+    # categories would drag in ten-week registered courses. The portal
+    # already answers that question on its own axis: type 6, "Daily
+    # Activities and Drop-Ins". Filtering on it means a category West
+    # Vancouver invents next month arrives on its own rather than being
+    # silently excluded by a list here that nobody remembered to update.
+    #
+    # Only recreation buildings are listed. The portal also exposes the art
+    # museum, the Ferry Building gallery, Municipal Hall, a secondary school
+    # and three parks; each is one line away if it ever publishes drop-ins
+    # worth having.
+    #
+    # The portal's own names for two of these are bare ("Aquatic Centre",
+    # "Ice Arena") and would read as nobody's building on a dashboard that
+    # spans nine cities, so they are given their full names here and the
+    # portal's spelling is kept as an alias — see center_aliases in
+    # scraper_activenet.py.
+    *(
+        {
+            "source_name": "District of West Vancouver",
+            "platform": "activenet",
+            "base_url": "https://anc.ca.apm.activecommunities.com",
+            "org_path": "westvanrec",
+            "center_id": center_id,
+            "location": location,
+            "center_aliases": aliases,
+            "type_ids": ["6"],
+            "calendar_label": f"Drop-in — {location}",
+            # Reached whenever the row's category is not one of the ones
+            # scraper_activenet.CATEGORY_ACTIVITY_TYPES names.
+            "activity_type": "Other",
+        }
+        for center_id, location, aliases in (
+            ("42", "West Vancouver Community Centre", ()),
+            ("32", "West Vancouver Aquatic Centre", ("Aquatic Centre",)),
+            ("37", "West Vancouver Ice Arena", ("Ice Arena",)),
+            ("51", "Gleneagles Community Centre", ()),
+            ("43", "Gleneagles Golf Course", ()),
+            (
+                "34",
+                "West Vancouver Seniors' Activity Centre",
+                ("Seniors' Activity Centre",),
+            ),
+            ("29", "West Vancouver Youth Hub", ("Youth Hub",)),
+        )
+    ),
 ]
 
 # How many days ahead to pull the schedule for.
@@ -259,6 +323,20 @@ SCHEDULE_WINDOW_DAYS = 14
 
 # How long fetched results are cached in memory before re-scraping (seconds).
 CACHE_TTL_SECONDS = 15 * 60
+
+# How many sources are fetched at once.
+#
+# A cold request blocks on the whole scrape, so this is what decides how long
+# the first visitor after a cache expiry waits. It matters more with every
+# city added: sources are per-calendar on PerfectMind and per-building on
+# ActiveNet, so a handful of cities is already dozens of sources, and at a
+# fixed worker count the wait grows with them.
+#
+# Kept well below the source count on purpose. Every source of a given city
+# hits that city's one portal, so this is also how hard this app leans on
+# somebody else's server; a dozen or so parallel requests is ordinary
+# browsing traffic, and a hundred is not.
+SCRAPE_MAX_WORKERS = 16
 
 # Where each venue physically is, for the map view.
 #
@@ -324,6 +402,31 @@ FACILITY_COORDS = {
     "Moody Park": (49.213314, -122.929143),
 }
 
+# Venues that are deliberately not in FACILITY_COORDS yet.
+#
+# A venue missing from the table above gets no map pin, which is a fine
+# failure — but it is also exactly what a typo in a source's "location"
+# looks like, and a typo costs the pin silently and forever. So the two are
+# told apart by being written down: test_scrapers.py requires every
+# ActiveNet venue to be either mapped or listed here, and nowhere else.
+#
+# Everything here still appears in the schedule, in the filters and in
+# search; only the map is missing it. Clearing an entry is one line: look
+# the building up in Google Maps, right-click it, copy the coordinates from
+# the top of the menu into FACILITY_COORDS, and delete the name from here.
+VENUES_AWAITING_COORDS = frozenset(
+    {
+        # District of West Vancouver
+        "West Vancouver Community Centre",
+        "West Vancouver Aquatic Centre",
+        "West Vancouver Ice Arena",
+        "Gleneagles Community Centre",
+        "Gleneagles Golf Course",
+        "West Vancouver Seniors' Activity Centre",
+        "West Vancouver Youth Hub",
+    }
+)
+
 # Which part of the region each city's venues belong to.
 #
 # This drives the "Area" filter and the map's colour coding, and it is what
@@ -340,6 +443,7 @@ AREAS = (
     {"name": "Port Moody", "cities": ("City of Port Moody",)},
     {"name": "New Westminster", "cities": ("City of New Westminster",)},
     {"name": "Burnaby", "cities": ("City of Burnaby",)},
+    {"name": "West Vancouver", "cities": ("District of West Vancouver",)},
 )
 
 # Built once at import: {source_name -> area name}, so annotating an event

@@ -101,9 +101,23 @@ gives you everything.
    with a **Raw Data** tab — either is fine.
 
 What's in there: a list of **centers** (the buildings, each with an `id` and
-a `name`) and a list of **categories** (`Drop-in - Aquatics`,
-`Drop-in - Skating`, …, each with an `id`). Those ids become `center_id` and
-`category_ids`, and the building's proper name becomes `location`.
+a `name`), a list of **categories**, and sometimes a list of **types**. The
+building's proper name becomes `location` and its id becomes `center_id`;
+the other two are the ways to narrow what gets pulled, and which one to use
+depends on the city:
+
+- If the categories are themselves drop-in — Port Coquitlam's read
+  `Drop-in - Aquatics`, `Drop-in - Skating` — use those ids as
+  `category_ids`.
+- If the categories only name the subject — West Vancouver's read
+  `Skating: Public Skate` and `Skating: Skate Lessons` side by side — look
+  in **types** for `Daily Activities and Drop-Ins` and use its id as
+  `type_ids` instead. That's the portal's own answer to "what can I just
+  turn up to", so it stays right when the city adds a category later.
+
+The `types` list is one of the things that comes back empty if you skipped
+the home page in step 1, so if you see no types, reload and check again
+before concluding the city has none.
 
 If the page comes back empty or errors, you skipped step 1 — the endpoint
 answers blank for a browser it hasn't seen before, which looks like "this
