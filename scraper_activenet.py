@@ -87,6 +87,16 @@ _TAG_RE = re.compile(r"<[^>]+>")
 # (Purple)") where the prefix is scheduling bookkeeping, not a place name.
 _PROGRAM_LOCATION_RE = re.compile(r"^\s*program location:\s*", re.I)
 
+# Vancouver prefixes every centre with an asterisk ("*Trout Lake Rink").
+# It is bookkeeping in their system, not part of the name anyone uses.
+_VENUE_PREFIX_RE = re.compile(r"^\*+\s*")
+
+# Vancouver also wraps its drop-in titles in pipes, "|Public Skate|", which
+# is presumably how they flag them internally. Only a *surrounding* pair is
+# removed: Burnaby's names use pipes as separators ("Jr Golf | Play | ...")
+# and must be left alone.
+_WRAPPED_NAME_RE = re.compile(r"^\|\s*(.*?)\s*\|$")
+
 
 def _build_session() -> requests.Session:
     session = requests.Session()
@@ -145,6 +155,13 @@ def _search_page(
             "date_before": date_to.isoformat(),
             "activity_category_ids": list(source.get("category_ids", [])),
             "center_ids": [source["center_id"]] if source.get("center_id") else [],
+            # Server-side name search. Some portals publish drop-ins mixed
+            # into a catalogue that is overwhelmingly registered courses —
+            # Vancouver lists 6,900 activities in a fortnight, of which the
+            # drop-ins are a rounding error — and there is no "drop-in"
+            # filter to ask for. Narrowing by name at the source fetches a
+            # few pages instead of a few hundred.
+            "activity_keyword": source.get("keyword", ""),
         },
         "activity_transfer_pattern": {},
     }
@@ -190,6 +207,15 @@ def _split_time_range(text: str) -> tuple[str, str]:
     return _parse_time(parts[0]) if parts else "", ""
 
 
+def _weekdays(raw: dict) -> set:
+    """The weekday numbers an activity runs on, from its "Mon,Wed,Fri" field."""
+    return {
+        _WEEKDAYS[token.strip()[:3].lower()]
+        for token in re.split(r"[,/&]| and ", raw.get("days_of_week") or "")
+        if token.strip()[:3].lower() in _WEEKDAYS
+    }
+
+
 def _occurrence_dates(raw: dict, window_start: dt.date, window_end: dt.date) -> list[dt.date]:
     """Every date this activity actually runs inside the window.
 
@@ -203,9 +229,24 @@ def _occurrence_dates(raw: dict, window_start: dt.date, window_end: dt.date) -> 
     That expansion can therefore show a session on a date the city later
     cancelled. Every card links back to the portal, which is authoritative.
     """
+    weekdays = _weekdays(raw)
+
     start_text = (raw.get("date_range_start") or "").strip()
     if not start_text:
-        return []
+        # An open-ended weekly schedule: no start date, no end date, just
+        # the days it runs on. Vancouver publishes its pool drop-ins this
+        # way — "Evening Public Swim, Tue and Thu", dateless, because it
+        # simply runs until further notice. Returning nothing for these
+        # dropped every public swim in the city. "Every Tuesday" with no
+        # end means every Tuesday in the window being asked about.
+        if not weekdays:
+            return []
+        span = (window_end - window_start).days
+        return [
+            day
+            for day in (window_start + dt.timedelta(days=n) for n in range(span + 1))
+            if day.weekday() in weekdays
+        ]
     try:
         start = dt.date.fromisoformat(start_text)
     except ValueError:
@@ -227,11 +268,6 @@ def _occurrence_dates(raw: dict, window_start: dt.date, window_end: dt.date) -> 
     if start == end:
         return [start]
 
-    weekdays = {
-        _WEEKDAYS[token.strip()[:3].lower()]
-        for token in re.split(r"[,/&]| and ", raw.get("days_of_week") or "")
-        if token.strip()[:3].lower() in _WEEKDAYS
-    }
     if not weekdays:
         return []
 
@@ -252,6 +288,12 @@ def _spots_and_status(raw: dict) -> tuple[str, str]:
     front end a second dialect.
     """
     text = str(raw.get("openings") or "").strip()
+    # A session with no cap. Left as a bare word it read as neither open nor
+    # full, so it was shown with a neutral badge and hidden by any
+    # open-only filter — the opposite of the truth, which is that anyone
+    # can walk in.
+    if text.casefold() == "unlimited":
+        return "Space available", "Register"
     try:
         openings = int(text)
     except ValueError:
@@ -275,13 +317,22 @@ def _normalize(raw: dict, source: dict, day: dt.date) -> Event:
     # card never shows a shortened spelling of the heading above it.
     room = ((raw.get("location") or {}).get("label") or "").strip()
     room = _PROGRAM_LOCATION_RE.sub("", room).strip()
-    location = source["location"]
-    if room.casefold() in {
+    room = _VENUE_PREFIX_RE.sub("", room).strip()
+
+    location = source.get("location") or ""
+    if not location:
+        # No venue named in config, so the row names it. A search that is
+        # not filtered to one building returns rows from all of them, which
+        # makes the label the building rather than a room inside it — the
+        # inverse of the case below. Keyword sources work this way: there
+        # is no single venue to put in config.
+        location, room = room, ""
+    elif room.casefold() in {
         alias.casefold() for alias in (location, *source.get("center_aliases", ()))
     }:
         room = ""
 
-    event_name = (raw.get("name") or "").strip()
+    event_name = _WRAPPED_NAME_RE.sub(r"\1", (raw.get("name") or "").strip()).strip()
     fallback = CATEGORY_ACTIVITY_TYPES.get(
         (raw.get("category") or "").strip(), source.get("activity_type", "Other")
     )
@@ -311,6 +362,19 @@ def _normalize(raw: dict, source: dict, day: dt.date) -> Event:
     )
 
 
+def _excluded(source: dict, event_name: str) -> bool:
+    """Whether a source's optional `exclude` pattern rejects this name.
+
+    A name search casts a slightly wider net than intended: searching a
+    pool's "Length Swim" also returns the block where the lanes are given
+    over to "Lessons/Swim Club", which is the opposite of something you can
+    drop in to. Cheaper than inventing a rule for it, and visible in config
+    next to the search that needs it.
+    """
+    pattern = source.get("exclude")
+    return bool(pattern and re.search(pattern, event_name or "", re.I))
+
+
 def fetch_calendar_events(source: dict, days_ahead: int) -> list[Event]:
     """Fetch and normalize drop-ins for a single ActiveNet centre."""
     # Same reasoning as the PerfectMind module: "today" is the venue's own
@@ -332,6 +396,8 @@ def fetch_calendar_events(source: dict, days_ahead: int) -> list[Event]:
             break
 
         for raw in items:
+            if _excluded(source, raw.get("name") or ""):
+                continue
             activity_id = str(raw.get("id") or "")
             if activity_id and activity_id in seen_ids:
                 continue

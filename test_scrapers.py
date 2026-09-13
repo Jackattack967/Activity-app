@@ -141,9 +141,17 @@ check(
     ),
     [],
 )
+# No dates at all, just weekdays: an open-ended weekly schedule that runs
+# until further notice. This is how Vancouver publishes its pool drop-ins,
+# and reading it as "no occurrences" dropped every public swim in the city.
 check(
-    "a missing start date is survivable",
+    "no dates but weekdays means every such day in the window",
     an._occurrence_dates({"date_range_start": "", "days_of_week": "Tue"}, start, window_end),
+    [dt.date(2026, 9, 8), dt.date(2026, 9, 15)],
+)
+check(
+    "no dates and no weekdays is still nothing",
+    an._occurrence_dates({"date_range_start": "", "days_of_week": ""}, start, window_end),
     [],
 )
 check(
@@ -281,18 +289,24 @@ ev = an._normalize(
 )
 check("a fitness class named after golf stays fitness", ev.activity_type, "Fitness")
 
-print("\n11. EVERY ACTIVENET VENUE CAN BE PUT ON THE MAP")
-# An ActiveNet source names its building in config rather than reading it
-# from the portal, so a typo there is invisible: the events still arrive and
-# only the map marker quietly goes missing. PerfectMind sources are not
-# checked here, because they learn their venue names by scraping.
+print("\n11. EVERY CONFIGURED VENUE CAN BE PUT ON THE MAP")
+# A building-based ActiveNet source names its venue in config rather than
+# reading it from the portal, so a typo there is invisible: the events still
+# arrive and only the map marker quietly goes missing.
+#
+# Only sources that declare a venue can be checked this way. PerfectMind
+# sources learn their venue names by scraping, and Vancouver's searches are
+# not pinned to a building at all — for both, an unknown venue simply gets
+# no marker (see _with_place in app.py), a missing pin rather than a
+# broken page.
 check(
-    "no ActiveNet venue is missing coordinates",
+    "no configured venue is missing coordinates",
     sorted(
         {
             s["location"]
             for s in config.SOURCES
             if s.get("platform") == "activenet"
+            and s.get("location")
             and s["location"] not in config.FACILITY_COORDS
         }
     ),
@@ -444,6 +458,105 @@ ev = an._normalize(
 check("the scraper stamps it onto the event", ev.cancelled, True)
 ev = an._normalize(golf_row, GOLF_SOURCE, dt.date(2026, 9, 12))
 check("and leaves an ordinary session alone", ev.cancelled, False)
+
+
+print("\n16. VANCOUVER IS CONFIGURED BY SEARCH, NOT BY BUILDING")
+# Vancouver publishes ~6,900 activities a fortnight and offers no "drop-in"
+# filter, so its entries are name searches rather than one-per-building.
+# That means two things the building-based sources never do: the venue
+# arrives on each row instead of from config, and two searches can return
+# the same session.
+VAN = [s for s in config.SOURCES if s["source_name"] == "City of Vancouver"]
+check("Vancouver has search-based sources", len(VAN) > 0, True)
+check(
+    "none of them names a venue in config",
+    [s["calendar_label"] for s in VAN if s.get("location")],
+    [],
+)
+check(
+    "and none pins a building either",
+    [s["calendar_label"] for s in VAN if s.get("center_id")],
+    [],
+)
+check("every one carries a keyword", all(s.get("keyword") for s in VAN), True)
+
+# The row supplies the building when config doesn't, with Vancouver's
+# asterisk and its pipe-wrapped title both stripped.
+SEARCH_SOURCE = {
+    "source_name": "City of Vancouver",
+    "platform": "activenet",
+    "keyword": "Public Skate",
+    "calendar_label": "Drop-in \u2014 Public Skate",
+    "activity_type": "Skating",
+}
+row = {
+    "name": "|Public Skate|",
+    "category": "",
+    "time_range": "12:45 PM - 2:15 PM",
+    "openings": "100",
+    "number": "625920",
+    "desc": "",
+    "detail_url": "https://example.invalid/a/1",
+    "location": {"label": "*Trout Lake Rink"},
+}
+ev = an._normalize(row, SEARCH_SOURCE, dt.date(2026, 9, 19))
+check("the row's label becomes the building", ev.location, "Trout Lake Rink")
+check("so there is no room to show", ev.facility, "Trout Lake Rink")
+check("the wrapping pipes come off the title", ev.event_name, "Public Skate")
+check("and the source's type still applies", ev.activity_type, "Skating")
+
+# Burnaby's titles use pipes as separators and must survive untouched.
+ev = an._normalize(
+    {**row, "name": "Jr Golf | Play (age 8-10) | Skills Development"},
+    SEARCH_SOURCE, dt.date(2026, 9, 19),
+)
+check(
+    "pipes inside a title are left alone",
+    ev.event_name,
+    "Jr Golf | Play (age 8-10) | Skills Development",
+)
+
+print("\n17. A SEARCH CAN OVERSHOOT, AND SEARCHES CAN OVERLAP")
+check(
+    "an excluded name is rejected",
+    an._excluded({"exclude": r"lesson|swim club"}, "Lessons/Swim Club | 1L Lengths"),
+    True,
+)
+check(
+    "a real drop-in is kept",
+    an._excluded({"exclude": r"lesson|swim club"}, "Length Swim (25m)"),
+    False,
+)
+check("no pattern rejects nothing", an._excluded({}, "Anything at all"), False)
+
+# Two searches returning one session must not list it twice.
+def _ev(course_id, name="Open Gym Drop-In"):
+    return events.Event(
+        activity_type="Sports", event_name=name, date="2026-09-18",
+        day_of_week="Friday", start_time="4:10 PM", end_time="5:10 PM",
+        facility="Renfrew Park Cmty Centre", location="Renfrew Park Cmty Centre",
+        price="", spots="10 spots left", status="Register",
+        source_name="City of Vancouver", calendar_label="x", course_id=course_id,
+    )
+import scraper as _s
+check(
+    "the same session from two searches collapses",
+    len(_s._without_duplicates([_ev("1"), _ev("1")])),
+    1,
+)
+check(
+    "two different activities that merely look alike do not",
+    len(_s._without_duplicates([_ev("1"), _ev("2")])),
+    2,
+)
+
+print("\n18. UNLIMITED CAPACITY IS OPEN, NOT UNKNOWN")
+# Vancouver marks uncapped sessions "Unlimited". Passed through as a bare
+# word it read as neither open nor full, so it wore a neutral badge and was
+# hidden by the hide-full filter — the opposite of the truth.
+spots, status = an._spots_and_status({"openings": "Unlimited"})
+check("phrased as available", spots, "Space available")
+check("and counted as open", watcher.is_open({"spots": spots, "status": status}), True)
 
 
 print("\n" + ("ALL PASSED" if not FAIL else f"FAILURES: {FAIL}"))

@@ -5,8 +5,8 @@ fitness, golf) from municipal recreation portals and shows them in one
 unified, filterable dashboard.
 
 Currently configured for **Coquitlam**, **Port Coquitlam**, **Port Moody**,
-**New Westminster** and **Burnaby** — around 790 sessions across 24 venues
-over the next 14 days. See [`config.py`](config.py) for how to add a calendar or a city.
+**New Westminster**, **Burnaby** and **Vancouver** — around 1,160 sessions
+across 56 venues over the next 14 days. See [`config.py`](config.py) for how to add a calendar or a city.
 
 Cities don't all run the same booking software, so the scraper is split by
 platform: [`scraper.py`](scraper.py) picks a module per source, and
@@ -106,8 +106,36 @@ module, since each has a different API shape. Write one exposing
 
 Not every neighbour is reachable. Metro Vancouver PerfectMind tenants exist
 for Coquitlam, Port Moody, New Westminster, Maple Ridge, Delta, White Rock,
-Surrey and North Vancouver (NVRC). Port Coquitlam and Burnaby are on
-ActiveNet. Vancouver and Richmond are on neither.
+Surrey and North Vancouver (NVRC). Port Coquitlam, Burnaby and Vancouver are
+on ActiveNet. Richmond is on neither.
+
+### Vancouver is configured by search, not by building
+
+Vancouver is the one city whose entries in `config.py` are name searches
+rather than one-per-building, and it is worth knowing why before copying
+the pattern.
+
+It publishes about **6,900 activities a fortnight**, almost all of them
+registered courses — swim lessons, skating levels, art classes. Its drop-ins
+are in there, but the portal offers no "drop-in" filter to ask for, so
+pulling the Aquatics, Skating and Sports categories whole would mean
+fetching roughly 120 pages of lesson listings to find a few dozen drop-ins.
+Each Vancouver source therefore sets a `keyword`, which ActiveNet applies
+server-side, and that costs a handful of pages each.
+
+Three things follow from it:
+
+- **Searches overlap.** "Open Gym Drop-In" answers both the `Open Gym` and
+  the `Drop-in` searches. `scraper.py` drops an occurrence a previous source
+  already returned, keyed on the portal's own activity id so two genuinely
+  different sessions that merely look alike are still kept apart.
+- **A search can overshoot.** Looking for `Length Swim` also finds the block
+  where the lanes go to lessons and the swim club, which is the opposite of
+  a drop-in, so a source may set an `exclude` pattern.
+- **The venue comes from the row.** A search that is not pinned to one
+  building returns rows from all of them, so each row names its own venue
+  rather than config naming it. Vancouver prefixes those with an asterisk
+  and wraps drop-in titles in pipes (`|Public Skate|`); both are stripped.
 
 Burnaby is configured for golf only, which is the one activity no other
 city here publishes. Its pools, rinks and gyms are on the same ActiveNet
