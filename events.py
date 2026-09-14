@@ -42,6 +42,40 @@ _ACTIVITY_PATTERNS = (
     ("Volleyball", re.compile(r"\bvolleyball\b", re.I)),
     ("Pickleball", re.compile(r"\bpickleball\b", re.I)),
     ("Table Tennis", re.compile(r"\btable tennis\b|\bping[- ]?pong\b", re.I)),
+    # Swimming before skating and fitness: "Aquafit" and "Water Fitness"
+    # happen in a pool, and every city that labels its own categories files
+    # them under aquatics rather than fitness.
+    (
+        "Swimming",
+        re.compile(
+            r"\bswim\b|\bswimming\b|\baqua\s?fit\b|\baquafit\b|"
+            r"\bwater\s?fit|\bwater\s?exercise\b|\blengths?\b",
+            re.I,
+        ),
+    ),
+    # Deliberately no "hockey" here: the sports calendars carry *floor*
+    # hockey, which is not on ice. Shinny and stick-and-puck are named
+    # explicitly instead, because those only ever mean the ice version.
+    (
+        "Skating",
+        re.compile(
+            r"\bskat(?:e|ing|er)\b|\bshinny\b|\bstick\s*(?:and|&|\+)\s*puck\b",
+            re.I,
+        ),
+    ),
+    # Last, and broadest. Anything above that also reads as fitness — an
+    # aquafit class, a basketball conditioning session — has already been
+    # claimed by the sport it actually is.
+    (
+        "Fitness",
+        re.compile(
+            r"\byoga\b|\bpilates\b|\bzumba\b|\bboot\s?camp\b|\bhiit\b|"
+            r"\baerobics\b|\bcycle\b|\bcycling\b|\bspin\b|\bstrength\b|"
+            r"\bcardio\b|\bfitness\b|\bweight\s?room\b|\bconditioning\b|"
+            r"\bbarre\b|\btai\s?chi\b|\bstretch\b|\bcore\b|\bmobility\b",
+            re.I,
+        ),
+    ),
 )
 
 

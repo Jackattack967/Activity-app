@@ -117,14 +117,18 @@ CATEGORY_ACTIVITY_TYPES = {
     "Sports: Outdoor Rec": "Sports",
     "Sports: General": "Sports",
     "Sports: Golf": "Golf",
-    # City of Vancouver. Broad categories, and the only ones here that a
-    # portal publishes HTML-escaped — "Fitness &amp; Health" is how it
-    # arrives, which is why the lookup unescapes first.
-    "Aquatics": "Swimming",
-    "Skating": "Skating",
-    "Fitness & Health": "Fitness",
-    "Sports": "Sports",
 }
+
+# Vancouver and West Vancouver are deliberately absent above. Both name
+# categories in their filters endpoint and then send none on the rows
+# themselves — 120 of 120 sampled rows across both, from three buildings
+# each, carried an empty category. Entries for them were written and then
+# removed: they could never have fired, and a mapping that cannot fire is
+# worse than no mapping, because it reads like the case is handled.
+#
+# Those two cities are typed from the event name instead, by
+# events.classify_activity, which is why its patterns cover swimming,
+# skating and fitness and not only the court sports.
 
 _TAG_RE = re.compile(r"<[^>]+>")
 
@@ -152,6 +156,51 @@ def _venue_key(name: str) -> str:
     for pattern, expansion in _ABBREVIATIONS:
         key = re.sub(pattern, expansion, key)
     return key
+
+
+# Wording a portal uses when it means "turn up", for the sources that have
+# to be filtered here rather than server-side.
+_DROP_IN_NAME_RE = re.compile(r"\bdrop\s?-?\s?in\b|\bshinny\b|\bopen\s+gym\b", re.I)
+
+
+def is_drop_in(raw: dict) -> bool:
+    """Whether an ActiveNet row is something you can just turn up to.
+
+    Only for portals that answer this nowhere else. West Vancouver tags its
+    activities with a "Daily Activities and Drop-Ins" type and is filtered
+    on that instead, server-side, which is strictly better. Vancouver
+    publishes no types, sends no category, and marks nothing on the row —
+    allow_drop_in_reg is False even on other cities' plainest drop-ins — so
+    the only thing left is the shape of what it publishes.
+
+    That shape turns out to be clear. Vancouver lists a drop-in as one row
+    per session with no end date, repeated for each date it runs:
+
+        Badminton                  2026-09-14..          Mon
+        Badminton                  2026-09-21..          Mon
+        Basketball - Full Court    2026-09-15..          Tue
+
+    and a registered course as a single row spanning its whole term:
+
+        Ageless Training - Set One 2026-09-08..2026-10-27 Tue
+        Journey Basketball         2026-09-08..2026-11-24 Tue
+
+    So a row covering exactly one date is a drop-in. A row spanning a range
+    is a course *unless* it says otherwise in its name, which is what keeps
+    the term-long ones ("Friday Youth Badminton Drop-In", running September
+    to December) rather than throwing them out with the leagues.
+
+    This is a judgement about someone else's data and it is not free: a
+    term-long drop-in that doesn't say "drop-in" in its title is dropped.
+    Erring that way is deliberate — a missing session is a quieter
+    dashboard, and a registered ten-week course shown as a drop-in is a
+    wasted trip.
+    """
+    if _DROP_IN_NAME_RE.search(raw.get("name") or ""):
+        return True
+    start = (raw.get("date_range_start") or "").strip()
+    end = (raw.get("date_range_end") or "").strip()
+    return not end or end == start
 
 
 def _build_session() -> requests.Session:
@@ -401,6 +450,8 @@ def fetch_calendar_events(source: dict, days_ahead: int) -> list[Event]:
             break
 
         for raw in items:
+            if source.get("drop_ins_only") and not is_drop_in(raw):
+                continue
             activity_id = str(raw.get("id") or "")
             if activity_id and activity_id in seen_ids:
                 continue

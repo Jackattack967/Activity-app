@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import config
 import scraper
+from events import classify_activity
 import scraper_activenet as an
 
 FAIL = []
@@ -576,38 +577,107 @@ check("a real room survives, undecorated", ev.facility, "Rink 2")
 # Matching the escaped form would drop every Vancouver fitness session to
 # the "Other" chip.
 ev = an._normalize(
-    {**row, "name": "Open Gym", "category": "Sports: Table Tennis"},
-    WESTVAN_SOURCE,
+    {**row, "name": "Open Gym", "category": "Drop-in - Sport"},
+    POCO_SOURCE,
     dt.date(2026, 9, 11),
 )
-check("a West Vancouver category maps to a known type", ev.activity_type, "Table Tennis")
-for written, want in [
-    ("Health and Fitness: Group Fitness", "Fitness"),
-    ("Skating: Public Skate", "Skating"),
-    ("Swimming: Aquafit", "Swimming"),
-    ("Sports: Golf", "Golf"),
-    ("Gymnastics: Gymnastics Drop-ins", "All Ages"),
+check("a mapped category still types the event", ev.activity_type, "Sports")
+# Some portals escape the ampersand in a category name and some don't, so
+# the lookup unescapes first. No configured city currently sends a category
+# containing one, which is exactly why this is pinned here rather than left
+# to be rediscovered the next time one does.
+an.CATEGORY_ACTIVITY_TYPES["Fitness & Health"] = "Fitness"
+try:
+    for written in ["Fitness &amp; Health", "Fitness & Health"]:
+        ev = an._normalize(
+            {**row, "name": "Open Session", "category": written},
+            {**POCO_SOURCE, "activity_type": "Other"},
+            dt.date(2026, 9, 11),
+        )
+        check(f"{written!r} maps the same", ev.activity_type, "Fitness")
+finally:
+    del an.CATEGORY_ACTIVITY_TYPES["Fitness & Health"]
+
+
+print("\n18. A DROP-IN IS TOLD FROM A COURSE BY THE SHAPE OF THE ROW")
+# Vancouver publishes no drop-in flag: no types, no category on the row,
+# and allow_drop_in_reg is False even on other cities' plainest drop-ins.
+# What it does do is list a drop-in once per session with no end date, and
+# a registered course once for its whole term. These are real rows.
+for name, start, end, want in [
+    ("Badminton", "2026-09-14", "", True),
+    ("Basketball - Full Court", "2026-09-15", "", True),
+    ("Group Fitness: Core and More", "2026-09-14", "2026-09-14", True),
+    ("Ageless Training - Set One", "2026-09-08", "2026-10-27", False),
+    ("Journey Basketball Grassroots", "2026-09-08", "2026-11-24", False),
+    ("Archery- Beginner", "2026-09-12", "2026-10-24", False),
+    ("Gymnathlon - BABY Group", "2026-09-19", "2026-10-31", False),
+    # The exception the name rule exists for: a genuine drop-in that runs
+    # all term and says so in its title.
+    ("Friday Youth Badminton Drop-In", "2026-09-04", "2026-12-18", True),
+    ("Drop-In: Youth Lounge", "2026-09-08", "2026-12-15", True),
 ]:
-    ev = an._normalize(
-        {**row, "name": "Open Session", "category": written},
-        WESTVAN_SOURCE,
-        dt.date(2026, 9, 11),
+    got = an.is_drop_in(
+        {"name": name, "date_range_start": start, "date_range_end": end}
     )
-    check(f"{written!r}", ev.activity_type, want)
-# Vancouver publishes its category entity-encoded. Matching the escaped
-# text would send every Vancouver fitness session to the "Other" chip.
-ev = an._normalize(
-    {**row, "name": "Open Session", "category": "Fitness &amp; Health"},
-    {**WESTVAN_SOURCE, "activity_type": "Other"},
-    dt.date(2026, 9, 11),
+    check(f"{name!r} ({start}..{end or '·'})", got, want)
+
+# The filter is opt-in. Every other city is narrowed by the portal itself —
+# by category or by type — and applying a name-and-shape guess on top would
+# silently drop their term-long drop-ins for no gain.
+check(
+    "only Vancouver filters drop-ins client-side",
+    sorted({s["source_name"] for s in config.SOURCES if s.get("drop_ins_only")}),
+    ["City of Vancouver"],
 )
-check("an escaped category is unescaped before lookup", ev.activity_type, "Fitness")
-ev = an._normalize(
-    {**row, "name": "Open Session", "category": "Fitness & Health"},
-    {**WESTVAN_SOURCE, "activity_type": "Other"},
-    dt.date(2026, 9, 11),
+check(
+    "and every Vancouver source does",
+    [
+        s["location"]
+        for s in config.SOURCES
+        if s["source_name"] == "City of Vancouver" and not s.get("drop_ins_only")
+    ],
+    [],
 )
-check("and the plain spelling still works", ev.activity_type, "Fitness")
+
+
+print("\n19. THE NEW CITIES ARE TYPED BY NAME, BECAUSE NOTHING ELSE CAN")
+# Vancouver and West Vancouver send no category at all, so every one of
+# their sessions would land on the "Other" chip without these.
+for name, want in [
+    ("Cycle Fit", "Fitness"),
+    ("Cycle Xpress", "Fitness"),
+    ("Flow Yoga", "Fitness"),
+    ("Bootcamp for Older Adults", "Fitness"),
+    ("Body Balance - Core and More", "Fitness"),
+    ("Lane Swim", "Swimming"),
+    ("Aquafit", "Swimming"),
+    ("Public Skate", "Skating"),
+    ("Stick and Puck", "Skating"),
+    ("Shinny", "Skating"),
+    ("Badminton", "Badminton"),
+    ("Basketball - Full Court", "Basketball"),
+]:
+    check(f"{name!r}", classify_activity(name, "Other"), want)
+
+# The two traps the classifier has always documented, now that it knows
+# many more words. Floor hockey is not on ice, and a gym class named after
+# golf is not golf — that second one is why there is no golf rule at all.
+check(
+    "floor hockey is still not skating",
+    classify_activity("High 5 Sports - Floor Hockey", "Other"),
+    "Other",
+)
+check(
+    "a golf lesson is still typed by its source",
+    classify_activity("Adult Golf | Intro to Golf | Beginner", "Golf"),
+    "Golf",
+)
+check(
+    "and a gym class named after golf is not golf",
+    classify_activity("Exercise for Golf Conditioning", "Golf"),
+    "Fitness",
+)
 
 
 print("\n" + ("ALL PASSED" if not FAIL else f"FAILURES: {FAIL}"))

@@ -325,12 +325,11 @@ SOURCES = [
     # narrow by is the four categories below, which are broad enough to
     # carry registered courses as well as drop-ins.
     #
-    # So this is deliberately the wide version, and check_sources.py is how
-    # it gets narrowed: run it against Vancouver, look at what actually
-    # comes back, and add the rule the real data justifies. Guessing a rule
-    # from here would be worse than not having one — a guess that excludes
-    # too much fails silently, and "this centre published nothing today" is
-    # indistinguishable from "the filter is wrong".
+    # check_sources.py answered what that leaves behind: 6,240 sessions,
+    # full of tennis lessons, bellydance levels and basketball leagues. The
+    # narrowing is therefore done here, on the shape of each row, which is
+    # the one thing Vancouver's own data does say — see
+    # scraper_activenet.is_drop_in.
     #
     # The pools and rinks are separate buildings from the community centres
     # they sit beside (Britannia is a centre, a pool and a rink), which is
@@ -351,7 +350,15 @@ SOURCES = [
             "location": location,
             # Aquatics, Skating, Sports, Fitness & Health.
             "category_ids": ["23", "24", "27", "28"],
+            # Vancouver's categories carry registered courses alongside
+            # drop-ins and it publishes no drop-in flag of any kind, so the
+            # split is made from the shape of each row instead — see
+            # scraper_activenet.is_drop_in, which explains what that costs.
+            "drop_ins_only": True,
             "calendar_label": f"Drop-in — {location}",
+            # Vancouver sends no category, so nothing maps: the type comes
+            # from the event name, and this is what a name nothing
+            # recognises falls back to.
             "activity_type": "Other",
         }
         for center_id, location in (
