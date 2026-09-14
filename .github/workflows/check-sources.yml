@@ -26,6 +26,9 @@ on:
       - "scraper*.py"
       - "events.py"
       - "check_sources.py"
+      # A scratch probe is pushed precisely so that CI runs it, so a change
+      # to one has to trigger the run that is its entire purpose.
+      - "explore_*.py"
       - ".github/workflows/check-sources.yml"
   # Run it by hand any time, against any branch, for any city.
   workflow_dispatch:
