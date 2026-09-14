@@ -39,6 +39,10 @@ on:
         required: false
         default: "15"
 
+# Only what posting the report back needs.
+permissions:
+  contents: write
+
 # One live scrape at a time. Two runs racing each other would double the
 # load on the portals and tell us nothing the first one didn't.
 concurrency:
@@ -90,6 +94,45 @@ jobs:
               echo "> app is broken; every other source still returned."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # The run summary is only readable by someone looking at the run. A
+      # commit comment reaches the commit's own page, shows up in the repo's
+      # activity, and can be read back through the plain REST API — which
+      # matters when whoever needs the answer isn't the person who pushed.
+      - name: Post the report on the commit
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Commit comments cap at 65536 characters, and a report covering
+          # every source of every city can approach that.
+          head -c 60000 /tmp/report.txt > /tmp/trimmed.txt
+          if [ "$(wc -c < /tmp/report.txt)" -gt 60000 ]; then
+            echo "" >> /tmp/trimmed.txt
+            echo "[trimmed — see the run summary for the whole report]" \
+              >> /tmp/trimmed.txt
+          fi
+
+          {
+            printf '### What the portals returned\n\n'
+            printf 'Automated output of `check_sources.py`, posted by the\n'
+            printf '[check-sources workflow](%s/actions/runs/%s).\n\n' \
+              "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+            printf '```\n'
+            cat /tmp/trimmed.txt
+            printf '\n```\n'
+          } > /tmp/comment.md
+
+          # -R reads it as raw text, -s as one string, so the report's
+          # backticks and newlines survive into valid JSON.
+          jq -Rs '{body: .}' /tmp/comment.md > /tmp/payload.json
+
+          curl -sS -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -d @/tmp/payload.json \
+            -o /dev/null -w 'Posted: HTTP %{http_code}\n'
 
       - name: Fail the run if a source errored
         if: steps.check.outputs.code != '0'
