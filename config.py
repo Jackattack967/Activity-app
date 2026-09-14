@@ -57,6 +57,23 @@
 # the schedule's date range in the venue's own local time, not the scraping
 # server's. Only add it explicitly for a source outside that timezone.
 
+def _vancouver_venue_type(location: str) -> str:
+    """What a Vancouver building does, when the session name doesn't say.
+
+    Vancouver names its buildings for what is in them, and the pools and
+    rinks are listed separately from the community centres they adjoin —
+    Britannia is a centre, a pool and a rink. That makes the building a
+    reliable fallback where the event name isn't: a session at a rink is on
+    ice whatever it is called.
+    """
+    lowered = location.casefold()
+    if "pool" in lowered or "aquatic" in lowered:
+        return "Swimming"
+    if "rink" in lowered or "arena" in lowered:
+        return "Skating"
+    return "Other"
+
+
 SOURCES = [
     {
         "source_name": "City of Coquitlam",
@@ -333,9 +350,17 @@ SOURCES = [
     #
     # The pools and rinks are separate buildings from the community centres
     # they sit beside (Britannia is a centre, a pool and a rink), which is
-    # how the portal lists them and how they map. Several of the pools are
-    # outdoor and summer-only, so they are empty most of the year — that is
-    # the portal being accurate, not the scrape failing.
+    # how the portal lists them and how they map.
+    #
+    # Several of them return nothing, and that is correct rather than
+    # broken. Some are outdoor and summer-only. The rest — Britannia Pool,
+    # Hillcrest Aquatic Centre, Killarney Pool, Killarney Rink — publish
+    # nothing here but lesson programs: "Swimming - Parent and Tot 1",
+    # "Skating - Child Level 3", every row, with no lane swim or public
+    # skate among them. Vancouver's public swim and skate schedules are not
+    # in this API at all. They are kept configured anyway, at the cost of
+    # one request each, so that anything they do start publishing arrives
+    # without a code change.
     #
     # Left out: "Vancouver Park Board Recreation Services", which is the
     # administrative catch-all rather than a building, so it has no address
@@ -356,10 +381,13 @@ SOURCES = [
             # scraper_activenet.is_drop_in, which explains what that costs.
             "drop_ins_only": True,
             "calendar_label": f"Drop-in — {location}",
-            # Vancouver sends no category, so nothing maps: the type comes
-            # from the event name, and this is what a name nothing
-            # recognises falls back to.
-            "activity_type": "Other",
+            # Vancouver sends no category, so the type comes from the event
+            # name — and where the name doesn't say, the building does. A
+            # rink only does ice and a pool only does water, so "30 + Drop
+            # In Hockey" at Britannia Rink is skating without needing a
+            # hockey rule that would misfile the floor hockey played in
+            # every gym in this app.
+            "activity_type": _vancouver_venue_type(location),
         }
         for center_id, location in (
             ("38", "Britannia Community Centre"),

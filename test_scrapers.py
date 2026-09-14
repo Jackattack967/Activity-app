@@ -641,6 +641,39 @@ check(
 )
 
 
+# Where the name says nothing, the building does. A rink only does ice.
+for location, want in [
+    ("Britannia Rink", "Skating"),
+    ("Kerrisdale Cyclone Taylor Arena", "Skating"),
+    ("Hillcrest Aquatic Centre", "Swimming"),
+    ("Killarney Pool", "Swimming"),
+    ("Trout Lake Community Centre", "Other"),
+]:
+    check(f"{location!r} falls back to", config._vancouver_venue_type(location), want)
+
+# The point of that: Vancouver's rinks publish ice hockey, and there is
+# deliberately no hockey rule in the classifier because every gym in this
+# app plays floor hockey. The building settles it without one.
+# category is cleared because Vancouver sends none — that absence is the
+# whole reason the building has to answer instead.
+rink = next(s for s in config.SOURCES if s.get("location") == "Britannia Rink")
+ev = an._normalize(
+    {**row, "name": "30 + Drop In Hockey (Players Only)", "category": ""},
+    rink,
+    dt.date(2026, 9, 11),
+)
+check("ice hockey at a rink is skating", ev.activity_type, "Skating")
+gym = next(
+    s for s in config.SOURCES if s.get("location") == "Trout Lake Community Centre"
+)
+ev = an._normalize(
+    {**row, "name": "High 5 Sports - Floor Hockey", "category": ""},
+    gym,
+    dt.date(2026, 9, 11),
+)
+check("floor hockey in a gym is not", ev.activity_type, "Other")
+
+
 print("\n19. THE NEW CITIES ARE TYPED BY NAME, BECAUSE NOTHING ELSE CAN")
 # Vancouver and West Vancouver send no category at all, so every one of
 # their sessions would land on the "Other" chip without these.

@@ -6,9 +6,8 @@ unified, filterable dashboard.
 
 Currently configured for **Vancouver**, **Coquitlam**, **Port Coquitlam**,
 **Port Moody**, **New Westminster**, **Burnaby** and **West Vancouver** — 74
-sources across 78 known venues. The five original cities were measured at around
-790 sessions over a 14-day window; Vancouver and West Vancouver are new and
-have not been counted. See [`config.py`](config.py) for how to add a calendar
+sources across 78 known venues, and around 2,000 sessions over a 14-day
+window, measured by `check_sources.py` against the live portals. See [`config.py`](config.py) for how to add a calendar
 or a city, and run [`check_sources.py`](check_sources.py) to see what a city
 is actually returning.
 
@@ -147,8 +146,17 @@ read.
 
 Vancouver publishes no activity "types", so unlike West Vancouver there is
 no drop-in axis to filter on — only four broad categories that carry
-registered courses alongside drop-ins. Its sources are deliberately the wide
-version until `check_sources.py` says what a narrower rule should be.
+registered courses alongside drop-ins, and nothing on a row marks which is
+which. The split is made from the shape of what it publishes instead: a
+drop-in is one row per session with no end date, a course is one row
+spanning its term. `scraper_activenet.is_drop_in` explains what that costs.
+
+Several Vancouver pools and rinks return nothing, and that is correct.
+Britannia Pool, Hillcrest Aquatic Centre, Killarney Pool and Killarney Rink
+publish only lesson programs here — "Swimming - Parent and Tot 1",
+"Skating - Child Level 3" — with no lane swim or public skate among them.
+Vancouver's public swim and skate schedules are not in this API. The rest of
+the empty ones are outdoor summer pools.
 
 Burnaby is configured for golf only, which is the one activity no other
 city here publishes. Its pools, rinks and gyms are on the same ActiveNet
