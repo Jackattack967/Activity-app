@@ -102,7 +102,49 @@ for type_id in ("1", "6"):
 
 print()
 print("=" * 72)
-print("4. WHAT HILLCREST ACTUALLY PUBLISHES (60 names, to judge by eye)")
+print("4. WHAT VANCOUVER'S POOLS AND RINKS PUBLISH")
+print("=" * 72)
+# The drop-in filter emptied these, which cannot be right: Hillcrest and
+# Killarney are major indoor pools. Their sessions must be shaped unlike
+# the community centres' — this is what that shape is.
+for center_id, label in (
+    ("59", "Hillcrest Aquatic Centre"),
+    ("36", "Killarney Pool"),
+    ("25", "Killarney Rink"),
+    ("37", "Britannia Pool"),
+):
+    print(f"\n--- {label} (centre {center_id})")
+    shown = 0
+    for page in range(1, 4):
+        data = post(
+            {
+                "activity_search_pattern": {
+                    **base,
+                    "activity_select_param": 2,
+                    "center_ids": [center_id],
+                    "activity_category_ids": ["23", "24", "27", "28"],
+                },
+                "activity_transfer_pattern": {},
+            },
+            page=page,
+        )
+        items = (data.get("body") or {}).get("activity_items") or []
+        if not items:
+            break
+        for raw in items:
+            if shown >= 22:
+                break
+            print(
+                f"    {(raw.get('name') or '')[:42]:<42} "
+                f"{raw.get('date_range_start')}..{raw.get('date_range_end') or ''} "
+                f"{(raw.get('days_of_week') or '')[:16]:<16} "
+                f"{raw.get('time_range')}"
+            )
+            shown += 1
+
+print()
+print("=" * 72)
+print("5. WHAT HILLCREST COMMUNITY CENTRE PUBLISHES (to compare)")
 print("=" * 72)
 seen = []
 for page in range(1, 6):
