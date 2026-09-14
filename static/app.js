@@ -762,6 +762,11 @@
       "Port Moody": "#0f766e",
       "New Westminster": "#7c3aed",
       Burnaby: "#be185d",
+      // Gold: the only one of the remaining hues not already close to a
+      // neighbour's. Vancouver borders Burnaby, so it has to stand apart
+      // from that rose above all, and green would be read as "has open
+      // spots", which is what the marker fill already means.
+      Vancouver: "#a16207",
     };
     const AREA_FALLBACK_COLOR = "#64748b";
 
