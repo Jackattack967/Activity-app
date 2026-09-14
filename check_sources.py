@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import collections
 import html
+import json
 import re
 import sys
 
@@ -70,6 +71,7 @@ def probe_raw(sources: list[dict], per_org: int = 3, pages: int = 2) -> None:
         categories: collections.Counter = collections.Counter()
         spans: collections.Counter = collections.Counter()
         examples: list[str] = []
+        sample_row: dict | None = None
 
         session = an._build_session()
         try:
@@ -91,6 +93,8 @@ def probe_raw(sources: list[dict], per_org: int = 3, pages: int = 2) -> None:
                 if not items:
                     break
                 for raw in items:
+                    if sample_row is None:
+                        sample_row = raw
                     category = (raw.get("category") or "").strip()
                     categories[category] += 1
 
@@ -128,6 +132,19 @@ def probe_raw(sources: list[dict], per_org: int = 3, pages: int = 2) -> None:
         print("\n  Example rows (name | category | dates | weekdays):")
         for line in examples:
             print(line)
+
+        # The fields above are the ones this app already reads. When a
+        # portal sends no category at all — as Vancouver and West Vancouver
+        # do — the useful question becomes what it sends *instead*, and the
+        # only honest way to answer that is to look at a whole row.
+        if sample_row is not None:
+            print("\n  Every field on one row:")
+            for key in sorted(sample_row):
+                value = sample_row[key]
+                if isinstance(value, (dict, list)):
+                    value = json.dumps(value)[:160]
+                text = str(value).replace("\n", " ")[:160]
+                print(f"    {key:<32} {text}")
 
 
 def main() -> int:
