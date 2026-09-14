@@ -138,10 +138,20 @@ _PROGRAM_LOCATION_RE = re.compile(r"^\s*program location:\s*", re.I)
 # a row's label is just repeating the building it is already filtered to.
 _DECORATION_RE = re.compile(r"^[\s*•\-]+")
 
+# Portals abbreviate the same building differently from how they name it in
+# their own picker: "Port Coquitlam Cmty Centre" for "Port Coquitlam
+# Community Centre", "*Britannia Cmty Centre" for "Britannia Community
+# Centre". Expanding the abbreviation is what makes those compare equal
+# without every city having to list its own spellings by hand.
+_ABBREVIATIONS = ((r"\bcmty\b", "community"), (r"\brec\b", "recreation"))
+
 
 def _venue_key(name: str) -> str:
     """A building name reduced to what actually identifies it."""
-    return _DECORATION_RE.sub("", name or "").strip().casefold()
+    key = _DECORATION_RE.sub("", name or "").strip().casefold()
+    for pattern, expansion in _ABBREVIATIONS:
+        key = re.sub(pattern, expansion, key)
+    return key
 
 
 def _build_session() -> requests.Session:
@@ -332,6 +342,7 @@ def _normalize(raw: dict, source: dict, day: dt.date) -> Event:
     # card never shows a shortened spelling of the heading above it.
     room = ((raw.get("location") or {}).get("label") or "").strip()
     room = _PROGRAM_LOCATION_RE.sub("", room).strip()
+    room = _DECORATION_RE.sub("", room).strip()
     location = source["location"]
     if _venue_key(room) in {
         _venue_key(alias) for alias in (location, *source.get("center_aliases", ()))

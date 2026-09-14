@@ -106,6 +106,16 @@ jobs:
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
+      # A scratch probe, present only while a city is being worked out.
+      - name: Run the temporary portal probe, if there is one
+        if: hashFiles('explore_vancouver.py') != ''
+        run: |
+          {
+            echo ""
+            echo "########## explore_vancouver.py ##########"
+            python explore_vancouver.py 2>&1 || echo "probe failed"
+          } >> /tmp/report.txt
+
       # The run summary is only readable by someone looking at the run. A
       # commit comment reaches the commit's own page, shows up in the repo's
       # activity, and can be read back through the plain REST API — which

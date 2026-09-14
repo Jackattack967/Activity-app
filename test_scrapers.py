@@ -551,6 +551,27 @@ ev = an._normalize(
 )
 check("the portal's bare name collapses to the full one", ev.facility, "West Vancouver Aquatic Centre")
 
+# Every portal checked abbreviates the building in the row differently
+# from how it names it in its own picker. Port Coquitlam listed its own
+# spelling as an alias by hand; expanding the abbreviation is what stops
+# every city having to.
+for label in [
+    "*Britannia Cmty Centre",
+    "Britannia Cmty Centre",
+    "britannia community centre",
+]:
+    ev = an._normalize(
+        {**row, "location": {"label": label}}, STARRED, dt.date(2026, 9, 11)
+    )
+    check(f"{label!r} collapses", ev.facility, "Britannia Community Centre")
+
+# A real room inside the building is still a room, and is shown without
+# whatever the portal decorated it with.
+ev = an._normalize(
+    {**row, "location": {"label": "*Rink 2"}}, STARRED, dt.date(2026, 9, 11)
+)
+check("a real room survives, undecorated", ev.facility, "Rink 2")
+
 # Categories arrive HTML-escaped from some portals and plain from others.
 # Matching the escaped form would drop every Vancouver fitness session to
 # the "Other" chip.
