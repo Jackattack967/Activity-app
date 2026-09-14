@@ -116,6 +116,12 @@ It fetches live and prints what each source gave back, which sources gave
 back nothing, and a sample of the names — the last of those being how you
 tell a filter that is pulling in registered courses from one that isn't.
 
+No local Python? The same check runs on GitHub. It fires automatically on
+any push that touches `config.py` or a scraper, and the report lands on the
+run's summary page — **Actions → Check what the portals actually return**.
+The **Run workflow** button there takes a city name, so you can re-run it
+against one city any time without pushing anything.
+
 A third booking platform (RecTrac, Amilia, Xplor, etc.) needs its own
 module, since each has a different API shape. Write one exposing
 `fetch_calendar_events()` and `build_login_url()`, then list it in

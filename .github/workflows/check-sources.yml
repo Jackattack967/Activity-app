@@ -1,0 +1,96 @@
+name: Check what the portals actually return
+
+# Why this exists:
+#
+# Adding a city is config, and config can be wrong in a way nothing notices.
+# Bad ids don't raise — the portal answers 200 with an empty result set, so a
+# mis-configured building looks exactly like a building with no drop-ins
+# today. The tests can't catch it either: they check the shape of the config,
+# not what the portals say back.
+#
+# check_sources.py asks them. This runs it on GitHub's machines so that
+# answering "did the city I just added actually work?" needs no local Python,
+# no checkout, and no terminal — just the Actions tab.
+#
+# It runs itself whenever the config or a scraper changes, because that is
+# exactly when the answer can change, and not otherwise: each run is a live
+# scrape of every configured source, which is real traffic on somebody else's
+# server. The same amount as one visitor loading the dashboard, but there is
+# no reason to spend it on a README edit.
+
+on:
+  push:
+    branches: ["**"]
+    paths:
+      - "config.py"
+      - "scraper*.py"
+      - "events.py"
+      - "check_sources.py"
+      - ".github/workflows/check-sources.yml"
+  # Run it by hand any time, against any branch, for any city.
+  workflow_dispatch:
+    inputs:
+      city:
+        description: "Which sources to check (blank = all of them)"
+        required: false
+        default: ""
+      sample:
+        description: "How many example names to print"
+        required: false
+        default: "15"
+
+# One live scrape at a time. Two runs racing each other would double the
+# load on the portals and tell us nothing the first one didn't.
+concurrency:
+  group: check-sources-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Only what the scrapers need. requirements.txt also pulls in the web
+      # app and its push-notification stack, none of which this touches, and
+      # which take far longer to install than the scrape takes to run.
+      - name: Install the scraper's dependencies
+        run: python -m pip install --quiet requests python-dotenv
+
+      - name: Ask the portals
+        id: check
+        run: |
+          set +e
+          python check_sources.py \
+            "${{ github.event.inputs.city }}" \
+            --sample "${{ github.event.inputs.sample || '15' }}" \
+            2>&1 | tee /tmp/report.txt
+          echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      # The run summary is a web page, so the report can be read (and copied)
+      # without opening the log at all.
+      - name: Put the report on the run summary
+        if: always()
+        run: |
+          {
+            echo "## What the portals returned"
+            echo
+            echo '```'
+            cat /tmp/report.txt
+            echo '```'
+            echo
+            if [ "${{ steps.check.outputs.code }}" != "0" ]; then
+              echo "> A red ✗ on this run means at least one source failed"
+              echo "> outright — see the list above. It does **not** mean the"
+              echo "> app is broken; every other source still returned."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail the run if a source errored
+        if: steps.check.outputs.code != '0'
+        run: exit 1
