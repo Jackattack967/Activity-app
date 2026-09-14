@@ -465,7 +465,36 @@ ev = an._normalize(golf_row, GOLF_SOURCE, dt.date(2026, 9, 12))
 check("and leaves an ordinary session alone", ev.cancelled, False)
 
 
-print("\n16. A DROP-IN-ONLY SEARCH IS SENT WHEN THE PORTAL OFFERS ONE")
+print("\n16. EVERY AREA HAS ITS OWN COLOUR ON THE MAP")
+# An area with no colour falls back to grey, which reads as "somewhere
+# else" rather than as a place. Adding a city and forgetting the colour is
+# a one-line omission with no error attached to it, and the bigger the city
+# the worse it looks — Vancouver was added and spent a day in grey.
+_colours = {
+    name.strip(): colour
+    for name, colour in re.findall(
+        r'["\']?([A-Za-z][A-Za-z ]*?)["\']?\s*:\s*"(#[0-9a-fA-F]{6})"',
+        _js[_js.index("const AREA_COLORS") : _js.index("AREA_FALLBACK_COLOR")],
+    )
+}
+check(
+    "no configured area is missing a colour",
+    sorted({a["name"] for a in config.AREAS} - set(_colours)),
+    [],
+)
+check(
+    "no colour is left behind for an area that is gone",
+    sorted(set(_colours) - {a["name"] for a in config.AREAS}),
+    [],
+)
+check(
+    "and no two areas share one",
+    len(set(_colours.values())),
+    len(_colours),
+)
+
+
+print("\n17. A DROP-IN-ONLY SEARCH IS SENT WHEN THE PORTAL OFFERS ONE")
 # West Vancouver's categories name the subject, not whether you can turn up
 # ("Skating: Public Skate" and "Skating: Skate Lessons" are siblings), so
 # its sources filter on the portal's separate "Daily Activities and
@@ -524,7 +553,7 @@ check(
     [],
 )
 
-print("\n17. A PORTAL'S OWN SPELLING IS NOT THE DASHBOARD'S")
+print("\n18. A PORTAL'S OWN SPELLING IS NOT THE DASHBOARD'S")
 # Two things each portal does to names that would otherwise leak onto cards.
 
 # Vancouver sorts its buildings with a leading bullet. That is display
@@ -599,7 +628,7 @@ finally:
     del an.CATEGORY_ACTIVITY_TYPES["Fitness & Health"]
 
 
-print("\n18. A DROP-IN IS TOLD FROM A COURSE BY THE SHAPE OF THE ROW")
+print("\n19. A DROP-IN IS TOLD FROM A COURSE BY THE SHAPE OF THE ROW")
 # Vancouver publishes no drop-in flag: no types, no category on the row,
 # and allow_drop_in_reg is False even on other cities' plainest drop-ins.
 # What it does do is list a drop-in once per session with no end date, and
@@ -674,7 +703,7 @@ ev = an._normalize(
 check("floor hockey in a gym is not", ev.activity_type, "Other")
 
 
-print("\n19. THE NEW CITIES ARE TYPED BY NAME, BECAUSE NOTHING ELSE CAN")
+print("\n20. THE NEW CITIES ARE TYPED BY NAME, BECAUSE NOTHING ELSE CAN")
 # Vancouver and West Vancouver send no category at all, so every one of
 # their sessions would land on the "Other" chip without these.
 for name, want in [

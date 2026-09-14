@@ -162,22 +162,46 @@ coordinates gets no pin.
 
 ---
 
+## When the portal won't tell you what a drop-in is
+
+Some ActiveNet portals answer this and some don't, and the difference
+decides how much work a city is:
+
+- **Categories say it** (Port Coquitlam: `Drop-in - Aquatics`) — filter on
+  `category_ids` and you're done.
+- **A type says it** (West Vancouver: `Daily Activities and Drop-Ins`) —
+  filter on `type_ids`. Better still, because it stays right when the city
+  adds a category.
+- **Nothing says it** (Vancouver: no types, no category on the row, and
+  `allow_drop_in_reg` is `False` even on other cities' plainest drop-ins) —
+  then it has to be worked out from the shape of what the portal publishes,
+  which is what `drop_ins_only` in `config.py` turns on. For Vancouver a
+  drop-in is one row per session with no end date, and a course is one row
+  spanning its term. Check this per city rather than assuming: it is a
+  guess about someone else's data, and `check_sources.py` is how you find
+  out whether the guess holds.
+
+Two more things those portals do that cost an afternoon each:
+
+- A portal may name categories in its filters endpoint and then send none
+  on the rows. Vancouver and West Vancouver both do. Sessions then have to
+  be typed from the event name, by `events.classify_activity`.
+- A building returning nothing is not automatically wrong. Vancouver's
+  pools publish nothing but swim lessons, so a drop-in filter empties them
+  correctly. Read the names before you go fixing it.
+
 ## The four cities being added now
 
 Exact addresses, so there's nothing to work out:
 
-### City of Vancouver — ActiveNet, org `vancouver`
+### City of Vancouver — ActiveNet, org `vancouver` — **done**
 
-1. <https://anc.ca.apm.activecommunities.com/vancouver/home>
-2. <https://anc.ca.apm.activecommunities.com/vancouver/rest/activities/filters?locale=en-US>
+Forty-six buildings, filtered by the shape of each row because the portal
+offers nothing else. See the section above.
 
-(If neither loads, Vancouver also answers on
-`https://ca.apm.activecommunities.com/vancouver/...` — same paths.)
+### District of West Vancouver — ActiveNet, org `westvanrec` — **done**
 
-### District of West Vancouver — ActiveNet, org `westvanrec`
-
-1. <https://anc.ca.apm.activecommunities.com/westvanrec/home>
-2. <https://anc.ca.apm.activecommunities.com/westvanrec/rest/activities/filters?locale=en-US>
+Seven buildings, filtered on type 6, "Daily Activities and Drop-Ins".
 
 ### City of Richmond — PerfectMind, org `23650/Clients`
 

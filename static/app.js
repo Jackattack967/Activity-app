@@ -763,6 +763,7 @@
       "New Westminster": "#7c3aed",
       Burnaby: "#be185d",
       "West Vancouver": "#166534",
+      Vancouver: "#a16207",
     };
     const AREA_FALLBACK_COLOR = "#64748b";
 
