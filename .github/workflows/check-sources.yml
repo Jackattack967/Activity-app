@@ -38,6 +38,10 @@ on:
         description: "How many example names to print"
         required: false
         default: "15"
+      raw:
+        description: "Also show the portal's own category names (true/false)"
+        required: false
+        default: "true"
 
 # Only what posting the report back needs.
 permissions:
@@ -70,10 +74,17 @@ jobs:
         id: check
         run: |
           set +e
+          # --raw by default: the workflow fires when the config changes,
+          # which is exactly when someone needs to see the portal's own
+          # category names rather than only the normalized counts.
+          raw=""
+          if [ "${{ github.event.inputs.raw || 'true' }}" = "true" ]; then
+            raw="--raw"
+          fi
           python check_sources.py \
             "${{ github.event.inputs.city }}" \
             --sample "${{ github.event.inputs.sample || '15' }}" \
-            2>&1 | tee /tmp/report.txt
+            $raw 2>&1 | tee /tmp/report.txt
           echo "code=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
 
       # The run summary is a web page, so the report can be read (and copied)

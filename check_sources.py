@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import argparse
 import collections
+import html
 import re
 import sys
 
 import config
 import scraper
+from scraper_activenet import CATEGORY_ACTIVITY_TYPES as CATEGORY_MAP
 
 # A registered course says so in its own name. This is a hint for a human
 # reading the output, not a filter — nothing here changes what the app
@@ -42,6 +44,92 @@ DROPIN_HINTS = re.compile(
 )
 
 
+def probe_raw(sources: list[dict], per_org: int = 3, pages: int = 2) -> None:
+    """Print the raw fields an ActiveNet portal actually sends.
+
+    The normalized Event deliberately doesn't carry the portal's own
+    category, so when a city arrives mostly typed "Other" there is nothing
+    in the report above that says which category names to map. This asks
+    the portal directly, for a sample of buildings per city.
+
+    It also counts how many rows are single-day against multi-week, which
+    is the question behind "is this a drop-in or a ten-week course" for a
+    portal that publishes no drop-in flag of its own.
+    """
+    import datetime as dt
+    import scraper_activenet as an
+
+    by_org: dict[tuple[str, str], list[dict]] = {}
+    for source in sources:
+        if source.get("platform") != "activenet":
+            continue
+        by_org.setdefault((source["source_name"], source["org_path"]), []).append(source)
+
+    for (city, org_path), org_sources in by_org.items():
+        print(f"\n{'=' * 70}\n{city}  (raw sample from {org_path})\n{'=' * 70}")
+        categories: collections.Counter = collections.Counter()
+        spans: collections.Counter = collections.Counter()
+        examples: list[str] = []
+
+        session = an._build_session()
+        try:
+            an._warm_up(session, org_sources[0])
+        except Exception as exc:  # noqa: BLE001 - a probe, not the app
+            print(f"  could not reach the portal: {exc}")
+            continue
+
+        today = dt.date.today()
+        window_end = today + dt.timedelta(days=config.SCHEDULE_WINDOW_DAYS)
+        for source in org_sources[:per_org]:
+            for page in range(1, pages + 1):
+                try:
+                    data = an._search_page(session, source, today, window_end, page)
+                except Exception as exc:  # noqa: BLE001
+                    print(f"  {source['location']} page {page}: {exc}")
+                    break
+                items = (data.get("body") or {}).get("activity_items") or []
+                if not items:
+                    break
+                for raw in items:
+                    category = (raw.get("category") or "").strip()
+                    categories[category] += 1
+
+                    start = (raw.get("date_range_start") or "").strip()
+                    end = (raw.get("date_range_end") or "").strip()
+                    if not end or end == start:
+                        spans["one day"] += 1
+                    else:
+                        try:
+                            days = (
+                                dt.date.fromisoformat(end) - dt.date.fromisoformat(start)
+                            ).days
+                        except ValueError:
+                            spans["unparseable"] += 1
+                            continue
+                        spans["2-13 days" if days < 14 else "14+ days"] += 1
+
+                    if len(examples) < 12:
+                        examples.append(
+                            f"    {(raw.get('name') or '')[:44]:<44} | "
+                            f"{category[:26]:<26} | {start}..{end or start} | "
+                            f"{(raw.get('days_of_week') or '')[:12]}"
+                        )
+
+        print("\n  Categories the portal sent, and whether we map them:")
+        for category, count in categories.most_common():
+            mapped = CATEGORY_MAP.get(html.unescape(category))
+            flag = f"-> {mapped}" if mapped else "-> UNMAPPED, becomes 'Other'"
+            print(f"  {count:>6}  {category or '(none)'!s:<34} {flag}")
+
+        print("\n  How long each activity runs (a drop-in is usually one day):")
+        for span, count in spans.most_common():
+            print(f"  {count:>6}  {span}")
+
+        print("\n  Example rows (name | category | dates | weekdays):")
+        for line in examples:
+            print(line)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -55,6 +143,11 @@ def main() -> int:
     )
     parser.add_argument(
         "--days", type=int, default=config.SCHEDULE_WINDOW_DAYS, help="days ahead"
+    )
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="also show the portal's own category names and date ranges",
     )
     args = parser.parse_args()
 
@@ -120,17 +213,31 @@ def main() -> int:
             )
 
     names = [e.event_name for e in events]
-    courses = sorted({n for n in names if COURSE_HINTS.search(n)})
-    if courses:
+    # Grouped by city, because "the filter is too wide" is a statement about
+    # one city's config, and a single merged list can't say whose.
+    courses_by_city: dict[str, set[str]] = collections.defaultdict(set)
+    total_by_city: dict[str, set[str]] = collections.defaultdict(set)
+    for event in events:
+        total_by_city[event.source_name].add(event.event_name)
+        if COURSE_HINTS.search(event.event_name):
+            courses_by_city[event.source_name].add(event.event_name)
+
+    if courses_by_city:
         print(
-            f"\n{len(courses)} distinct name(s) look like registered courses "
-            "rather than\ndrop-ins. If this list is long, the source's filter "
-            "is too wide:"
+            "\nNames that look like registered courses rather than drop-ins.\n"
+            "A high share for a city means that city's filter is too wide:"
         )
-        for name in courses[: args.sample]:
+        for city in sorted(total_by_city, key=lambda c: -len(courses_by_city[c])):
+            course_count = len(courses_by_city[city])
+            share = course_count / max(len(total_by_city[city]), 1)
+            print(
+                f"  {course_count:>5} of {len(total_by_city[city]):>5} distinct "
+                f"names ({share:>4.0%})  {city}"
+            )
+        worst = max(courses_by_city, key=lambda c: len(courses_by_city[c]))
+        print(f"\n  Examples from {worst}:")
+        for name in sorted(courses_by_city[worst])[: args.sample]:
             print(f"  ? {name}")
-        if len(courses) > args.sample:
-            print(f"  ... and {len(courses) - args.sample} more")
 
     unsure = sorted(
         {n for n in names if not COURSE_HINTS.search(n) and not DROPIN_HINTS.search(n)}
@@ -147,6 +254,9 @@ def main() -> int:
             f"\n({len(unsure)} name(s) read as neither obviously drop-in nor "
             "obviously a\ncourse — those are the ones worth eyeballing.)"
         )
+
+    if args.raw:
+        probe_raw(sources)
 
     return 1 if errors else 0
 
