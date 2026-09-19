@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/nocturne-914966cf-ab57-4ed7-b246-04a41d32a00c/styles.css">
+<script src="_ds/nocturne-914966cf-ab57-4ed7-b246-04a41d32a00c/_ds_bundle.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body { margin: 0; background: #e2540b; color: #fff7ef; font-family: "Inter", system-ui, sans-serif; }
+  a { color: #0a5f57; text-decoration: none; }
+  a:hover { color: #063f39; }
+  *:focus-visible { outline: 2px solid #0f9488; outline-offset: 2px; }
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-thumb { background: #cad0e8; border-radius: 8px; }
+  .leaflet-container { background: #eef0fa; font-family: "Inter", system-ui, sans-serif; }
+  .leaflet-control-zoom a { background: #fbfcff; color: #1c1e27; border-color: #d7dceb; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip { background: #fbfcff; color: #1c1e27; box-shadow: 0 0 0 1px #d7dceb, 0 6px 18px rgba(41,43,49,0.15); }
+</style>
+</helmet>
+
+<div style="min-height: 100vh; background: linear-gradient(160deg, #f0620e, #d94f08); color: #fff7ef; font-family: var(--font-body); display: flex; flex-direction: column;">
+
+  <header style="display: flex; flex-wrap: wrap; align-items: center; gap: clamp(8px, 2vw, 16.8px); padding: clamp(10px, 2vw, 14px) clamp(14px, 4vw, 22.4px); border-bottom: 1px solid rgba(255,247,239,0.18);">
+    <h1 style="margin: 0; font-family: var(--font-heading); font-weight: 600; font-size: clamp(19px, 1.4vw + 14px, 25px); letter-spacing: -0.025em; flex: 0 0 auto; color: #fff7ef;">Activity Schedule</h1>
+    <span style="font-size: 12.5px; color: rgba(255,247,239,0.72); border-left: 1px solid rgba(255,247,239,0.25); padding-left: 16.8px;">{{ updatedLabel }}</span>
+
+    <div style="flex: 1 1 40px;"></div>
+
+    <div style="display: flex; align-items: center; gap: 2.8px; padding: 2.8px; border: 1px solid rgba(255,247,239,0.25); border-radius: 8px; background: rgba(255,247,239,0.12);">
+      <button type="button" onClick="{{ showList }}" style="{{ listBtnStyle }}">List</button>
+      <button type="button" onClick="{{ showMap }}" style="{{ mapBtnStyle }}">Map</button>
+    </div>
+
+    <button type="button" onClick="{{ refresh }}" style="height: 32px; padding: 0 12px; border: 1px solid rgba(255,247,239,0.4); border-radius: 8px; background: transparent; color: #fff7ef; font-family: inherit; font-size: 13px; cursor: pointer;" style-hover="border-color: #0f9488; color: #baf3e9;">Refresh</button>
+    <button type="button" style="height: 32px; padding: 0 12px; border: 1px solid rgba(255,247,239,0.25); border-radius: 8px; background: transparent; color: rgba(255,247,239,0.75); font-family: inherit; font-size: 13px; cursor: pointer;" style-hover="border-color: rgba(255,247,239,0.6); color: #fff7ef;">Feedback</button>
+    <button type="button" style="width: 32px; height: 32px; border-radius: 999px; border: 1px solid #0f9488; background: #e3f6f3; color: #0a5f57; font-family: inherit; font-size: 13px; cursor: pointer;">J</button>
+  </header>
+
+  <sc-if value="{{ showTipBanner }}" hint-placeholder-val="{{ true }}">
+    <div style="display: flex; align-items: center; gap: 8.4px; margin: clamp(8px, 2vw, 11.2px) clamp(14px, 4vw, 22.4px) 0; padding: 8.4px 16.8px; border-radius: {{ radius }}; background: #fffaf5; box-shadow: 0 6px 16px rgba(90,30,0,0.18); font-size: 13px; color: #3c2418;">
+      <span aria-hidden="true" style="color: #0c7a70;">&#9733;</span>
+      <span style="flex: 1 1 auto;"><strong style="font-weight: 500; color: #063f39;">Watch an activity.</strong> Star any session and you'll be told the moment a spot opens.</span>
+      <button type="button" onClick="{{ dismissTip }}" style="border: 0; background: transparent; color: #0a5f57; font-family: inherit; font-size: 13px; cursor: pointer; padding: 2px 6px;">Dismiss</button>
+    </div>
+  </sc-if>
+
+  <div style="{{ rowStyle }}">
+
+    <aside style="flex: 1 1 200px; max-width: 220px; min-width: min(100%, 168px); border-radius: {{ radius }}; box-shadow: 0 8px 22px rgba(90,30,0,0.16); padding: {{ panelPad }}; display: flex; flex-direction: column; gap: {{ panelGap }}; background: #fffaf5;">
+      <input type="search" value="{{ q }}" onChange="{{ setQ }}" placeholder="Search activities&#8230;" style="width: 100%; box-sizing: border-box; height: 34px; padding: 0 10px; border: 1px solid #d7dceb; border-radius: 8px; background: #fbfcff; color: #1c1e27; font-family: inherit; font-size: 13px;">
+
+      <div style="display: flex; flex-direction: column; gap: 5.6px;">
+        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #5c5f72;">Area</label>
+        <select value="{{ area }}" onChange="{{ setArea }}" style="width: 100%; box-sizing: border-box; height: 32px; border: 1px solid #d7dceb; border-radius: 8px; background: #fbfcff; color: #1c1e27; font-family: inherit; font-size: 13px; padding: 0 6px;">
+          <sc-for list="{{ areas }}" as="a" hint-placeholder-count="4">
+            <option value="{{ a.value }}">{{ a.label }}</option>
+          </sc-for>
+        </select>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 5.6px;">
+        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #5c5f72;">Venue</label>
+        <select value="{{ loc }}" onChange="{{ setLoc }}" style="width: 100%; box-sizing: border-box; height: 32px; border: 1px solid #d7dceb; border-radius: 8px; background: #fbfcff; color: #1c1e27; font-family: inherit; font-size: 13px; padding: 0 6px;">
+          <sc-for list="{{ venues }}" as="v" hint-placeholder-count="6">
+            <option value="{{ v.value }}">{{ v.label }}</option>
+          </sc-for>
+        </select>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 5.6px;">
+        <label style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #5c5f72;">Activity</label>
+        <div style="display: flex; flex-direction: column; gap: 1px;">
+          <sc-for list="{{ cats }}" as="c" hint-placeholder-count="9">
+            <button type="button" onClick="{{ c.select }}" style="{{ c.style }}">
+              <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ c.name }}</span>
+              <span style="{{ c.countStyle }}">{{ c.count }}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+
+      <div style="display: flex; flex-direction: column; gap: 8.4px; padding-top: 11.2px; border-top: 1px solid #d7dceb;">
+        <label style="display: flex; align-items: center; gap: 8.4px; font-size: 13px; color: #2c2e3a; cursor: pointer;">
+          <input type="checkbox" checked="{{ hideFull }}" onChange="{{ toggleHideFull }}" style="accent-color: #0c7a70; width: 15px; height: 15px;">
+          Hide full sessions
+        </label>
+        <label style="display: flex; align-items: center; gap: 8.4px; font-size: 13px; color: #2c2e3a; cursor: pointer;">
+          <input type="checkbox" checked="{{ favOnly }}" onChange="{{ toggleFavOnly }}" style="accent-color: #0c7a70; width: 15px; height: 15px;">
+          Starred only
+        </label>
+      </div>
+
+      <button type="button" onClick="{{ clearAll }}" style="margin-top: auto; height: 32px; border: 1px solid #d7dceb; border-radius: 8px; background: transparent; color: #53566a; font-family: inherit; font-size: 12.5px; cursor: pointer;" style-hover="border-color: #9397ab; color: #1c1e27;">Clear all filters</button>
+    </aside>
+
+    <main style="flex: 3 1 300px; min-width: min(100%, 240px); border-radius: {{ radius }}; box-shadow: 0 8px 22px rgba(90,30,0,0.16); background: #fffaf5; display: flex; flex-direction: column; min-height: 0; overflow: hidden;">
+      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 11.2px; padding: 11.2px 22.4px; border-bottom: 1px solid #d7dceb;">
+        <span style="font-size: 13px; color: #53566a;">{{ resultLabel }}</span>
+        <div style="flex: 1 1 20px;"></div>
+        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #5c5f72;">Sort</span>
+        <div style="display: flex; gap: 2.8px; padding: 2.8px; border: 1px solid #d7dceb; border-radius: 8px;">
+          <button type="button" onClick="{{ sortTime }}" style="{{ sortTimeStyle }}">Soonest</button>
+          <button type="button" onClick="{{ sortNear }}" style="{{ sortNearStyle }}">Nearest</button>
+        </div>
+      </div>
+
+      <sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+        <div style="flex: 1 1 auto; overflow: auto; padding: 0 22.4px 33.6px;">
+          <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+            <section data-screen-label="{{ g.label }}">
+              <div style="position: sticky; top: 0; z-index: 2; display: flex; align-items: baseline; gap: 11.2px; padding: 16.8px 0 8.4px; background: linear-gradient(180deg, #eef0fa 70%, rgba(238,240,250,0));">
+                <h2 style="margin: 0; font-family: var(--font-heading); font-weight: 500; font-size: 14px; letter-spacing: 0.02em; color: #1c1e27;">{{ g.label }}</h2>
+                <span style="font-size: 12px; color: #5c5f72;">{{ g.count }}</span>
+                <span style="flex: 1 1 auto; height: 1px; background: linear-gradient(90deg, #d7dceb, rgba(215,220,235,0));"></span>
+              </div>
+
+              <div style="display: flex; flex-direction: column; gap: 5.6px;">
+                <sc-for list="{{ g.sessions }}" as="s" hint-placeholder-count="4">
+                  <article onClick="{{ s.select }}" style="{{ s.cardStyle }} display: flex; flex-wrap: wrap; row-gap: 4px;">
+                    <div style="flex: 0 0 66px; display: flex; flex-direction: column; gap: 1px; padding-top: 1px;">
+                      <span style="font-size: 13px; font-variant-numeric: tabular-nums; color: #1c1e27;">{{ s.start }}</span>
+                      <span style="font-size: 11.5px; font-variant-numeric: tabular-nums; color: #5c5f72;">{{ s.end }}</span>
+                    </div>
+
+                    <div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2.8px;">
+                      <div style="display: flex; align-items: center; gap: 8.4px; min-width: 0;">
+                        <button type="button" onClick="{{ s.star }}" title="Watch this session" style="{{ s.starStyle }}">{{ s.starGlyph }}</button>
+                        <h3 style="{{ s.titleStyle }}">{{ s.title }}</h3>
+                      </div>
+                      <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8.4px; font-size: 12.5px; color: #53566a; padding-left: 24px; min-width: 0;">
+                        <span style="flex: 0 0 auto; font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; padding: 2px 6px; border-radius: 4px; border: 1px solid #dfe3ef; color: #5c5f72;">{{ s.cat }}</span>
+                        <span style="flex: 1 1 auto; min-width: 40px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ s.venue }}</span>
+                        <span style="flex: 0 0 auto; color: #a8adc4;">&middot;</span>
+                        <span style="flex: 0 0 auto; white-space: nowrap; color: #63667a;">{{ s.dist }}</span>
+                        <span style="flex: 0 0 auto; color: #a8adc4;">&middot;</span>
+                        <span style="flex: 0 0 auto; white-space: nowrap; color: #63667a;">{{ s.price }}</span>
+                      </div>
+                    </div>
+
+                    <div style="flex: 0 0 100%; padding-left: 82.8px; display: flex; justify-content: flex-end;">
+                      <span style="{{ s.badgeStyle }}">{{ s.badge }}</span>
+                    </div>
+                  </article>
+                </sc-for>
+              </div>
+            </section>
+          </sc-for>
+
+          <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="margin-top: 56px; text-align: center; color: #63667a; font-size: 13.5px;">
+              <p style="margin: 0 0 16.8px;">No sessions match these filters.</p>
+              <button type="button" onClick="{{ clearAll }}" style="height: 34px; padding: 0 16.8px; border: 1px solid #0f9488; border-radius: 8px; background: transparent; color: #0a5f57; font-family: inherit; font-size: 13px; cursor: pointer;">Clear all filters</button>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ isMap }}" hint-placeholder-val="{{ false }}">
+        <div style="flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; padding: 16.8px 22.4px 22.4px;">
+          <div ref="{{ mapRef }}" style="flex: 1 1 auto; min-height: 420px; border: 1px solid #d7dceb; border-radius: 14px; overflow: hidden;"></div>
+          <div style="display: flex; flex-wrap: wrap; gap: 16.8px; padding-top: 11.2px; font-size: 12px; color: #63667a;">
+            <span style="display: flex; align-items: center; gap: 5.6px;"><i style="width: 9px; height: 9px; border-radius: 999px; background: #0c7a70; display: inline-block;"></i> Has open spots</span>
+            <span style="display: flex; align-items: center; gap: 5.6px;"><i style="width: 9px; height: 9px; border-radius: 999px; background: #c3c8e0; display: inline-block;"></i> Currently full</span>
+            <span>Pin numbers are sessions at that venue.</span>
+          </div>
+        </div>
+      </sc-if>
+    </main>
+
+    <aside style="flex: 2 1 260px; max-width: 340px; min-width: min(100%, 220px); border-radius: {{ radius }}; box-shadow: 0 8px 22px rgba(90,30,0,0.16); background: #fffaf5; display: flex; flex-direction: column; min-height: 0;">
+      <sc-if value="{{ hasSel }}" hint-placeholder-val="{{ true }}">
+        <div style="flex: 1 1 auto; overflow: auto; padding: 22.4px; display: flex; flex-direction: column; gap: 16.8px;">
+          <div style="display: flex; align-items: flex-start; gap: 11.2px;">
+            <div style="flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 5.6px;">
+              <span style="font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #0a5f57;">{{ sel.cat }}</span>
+              <h2 style="margin: 0; font-family: var(--font-heading); font-weight: 500; font-size: 19px; line-height: 1.25; letter-spacing: -0.01em; text-wrap: pretty;">{{ sel.title }}</h2>
+            </div>
+            <button type="button" onClick="{{ starSel }}" title="Watch this session" style="{{ sel.starStyle }}">{{ sel.starGlyph }}</button>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 2.8px;">
+            <span style="{{ sel.badgeStyle }}">{{ sel.badge }}</span>
+            <div style="margin-top: 8.4px; height: 4px; border-radius: 999px; background: #e4e7f5; overflow: hidden;">
+              <div style="{{ sel.barStyle }}"></div>
+            </div>
+            <span style="font-size: 11.5px; color: #5c5f72;">{{ sel.capacityLabel }}</span>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 0;">
+            <sc-for list="{{ sel.facts }}" as="f" hint-placeholder-count="5">
+              <div style="display: flex; gap: 11.2px; padding: 8.4px 0; border-bottom: 1px solid #eceff8;">
+                <span style="flex: 0 0 84px; font-size: 12px; color: #5c5f72;">{{ f.k }}</span>
+                <span style="flex: 1 1 auto; font-size: 13px; color: #1c1e27; text-wrap: pretty;">{{ f.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+
+          <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #2c2e3a; text-wrap: pretty;">{{ sel.desc }}</p>
+
+          <div style="display: flex; flex-direction: column; gap: 8.4px;">
+            <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: #5c5f72;">Other times</span>
+            <sc-for list="{{ sel.others }}" as="o" hint-placeholder-count="3">
+              <button type="button" onClick="{{ o.select }}" style="display: flex; align-items: center; gap: 11.2px; width: 100%; text-align: left; padding: 8.4px 11.2px; border: 1px solid #d7dceb; border-radius: 8px; background: #fbfcff; color: #1c1e27; font-family: inherit; font-size: 12.5px; cursor: pointer;" style-hover="border-color: #0f9488; color: #063f39;">
+                <span style="flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ o.when }}</span>
+                <span style="flex: 0 0 auto; color: #63667a;">{{ o.spots }}</span>
+              </button>
+            </sc-for>
+            <sc-if value="{{ sel.noOthers }}" hint-placeholder-val="{{ false }}">
+              <span style="font-size: 12.5px; color: #5c5f72;">This is the only session of this activity in the next 7 days.</span>
+            </sc-if>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8.4px; margin-top: auto; padding-top: 16.8px;">
+            <a href="#register" style="display: flex; align-items: center; justify-content: center; gap: 8.4px; height: 40px; border: 1px solid #0f9488; border-radius: 8px; color: #0a5f57; font-size: 13.5px;" style-hover="background: #e3f6f3; color: #063f39;">{{ sel.cta }} &#8599;</a>
+            <span style="font-size: 11.5px; line-height: 1.5; color: #5c5f72; text-align: center;">{{ sel.ctaNote }}</span>
+          </div>
+        </div>
+      </sc-if>
+
+      <sc-if value="{{ noSel }}" hint-placeholder-val="{{ false }}">
+        <div style="flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; gap: 11.2px; padding: 33.6px 22.4px; text-align: center; color: #5c5f72;">
+          <span aria-hidden="true" style="font-size: 22px; color: #a8adc4;">&#9634;</span>
+          <p style="margin: 0; font-size: 13px; line-height: 1.5;">Pick a session to see the description, price, capacity and other times &mdash; without losing your place in the list.</p>
+        </div>
+      </sc-if>
+    </aside>
+  </div>
+
+  <footer style="padding: 11.2px 22.4px 22.4px; font-size: 11.5px; color: rgba(255,247,239,0.75);">
+    Read live from each city's own booking system &middot; next 7 days &middot; unofficial, for personal convenience only.
+  </footer>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;$preview&quot;: {&quot;width&quot;: 1280, &quot;height&quot;: 800},
+  &quot;density&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;default&quot;: &quot;comfortable&quot;, &quot;options&quot;: [&quot;comfortable&quot;, &quot;compact&quot;], &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Layout&quot;},
+  &quot;cardRadius&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 14, &quot;min&quot;: 6, &quot;max&quot;: 24, &quot;step&quot;: 2, &quot;unit&quot;: &quot;px&quot;, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Layout&quot;},
+  &quot;showWatchTip&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Behavior&quot;}
+}">
+const YOU = [49.266, -122.83];
+
+const VENUES = {
+  "Poirier Sport & Leisure Complex": { area: "Coquitlam", ll: [49.2554, -122.8797] },
+  "Glen Pine Pavilion": { area: "Coquitlam", ll: [49.2793, -122.8099] },
+  "City Centre Aquatic Complex": { area: "Coquitlam", ll: [49.2786, -122.7996] },
+  "Pinetree Community Centre": { area: "Coquitlam", ll: [49.2806, -122.7946] },
+  "Port Moody Recreation Complex": { area: "Port Moody", ll: [49.2807, -122.8452] },
+  "Queen's Park Arena": { area: "New Westminster", ll: [49.2115, -122.9114] },
+  "Westwood Plateau Practice Centre": { area: "Coquitlam", ll: [49.2903, -122.7714] }
+};
+
+const DATA = [
+  { id: 1, day: "today", start: "1:00 PM", end: "3:00 PM", title: "Drop-in Pickleball", cat: "Pickleball", venue: "Poirier Sport & Leisure Complex", room: "Gymnasium 2", price: "$0.00 – $6.50", program: "Drop-in Adult & Senior Sports", spots: 9, cap: 32, ages: "Adult & senior, beginner to intermediate",
+    desc: "For adult and senior players. Enjoy the game of pickleball, meet some friends and have loads of fun in this drop-in program. Only registered participants allowed in the gym space during the program time." },
+  { id: 2, day: "today", start: "1:00 PM", end: "2:00 PM", title: "Figure Skating Buy-On", cat: "Skating", venue: "Poirier Sport & Leisure Complex", room: "Ice Arena 2", price: "$9.00", program: "Skating", spots: 20, cap: 24, ages: "All ages, own skates required",
+    desc: "Buy on to a figure skating session. Patch and freestyle ice for skaters working on programs; helmets required for skaters under 6." },
+  { id: 3, day: "today", start: "1:00 PM", end: "3:30 PM", title: "Movies Friday — Extremely Loud & Incredibly Close", cat: "Adult", venue: "Glen Pine Pavilion", room: "Green Room", price: "$0.00 – $2.00", program: "Adult drop-in (pre-registration recommended)", spots: 23, cap: 40, ages: "Adult 50+",
+    desc: "A Friday afternoon film in the Green Room, with coffee and tea. Pre-registration is recommended but walk-ins are welcome while seats last." },
+  { id: 4, day: "today", start: "4:00 PM", end: "6:00 PM", title: "Adult Drop-in Badminton", cat: "Badminton", venue: "Pinetree Community Centre", room: "Gymnasium", price: "$6.50", program: "Drop-in Adult Sports", spots: 0, cap: 28, ages: "19+",
+    desc: "Six courts, rotating doubles. Rackets available to borrow at the front desk while supplies last." },
+  { id: 5, day: "today", start: "6:00 PM", end: "7:30 PM", title: "Lane Swim", cat: "Fitness", venue: "City Centre Aquatic Complex", room: "50m Pool", price: "$3.25 – $6.75", program: "Drop-in Aquatics", spots: 12, cap: 45, ages: "All ages",
+    desc: "Eight lanes reserved for continuous swimming, divided slow, medium and fast. The leisure pool and hot tub stay open alongside." },
+  { id: 6, day: "today", start: "7:00 PM", end: "9:00 PM", title: "Drop-in Basketball", cat: "Basketball", venue: "Port Moody Recreation Complex", room: "Main Gym", price: "$6.50", program: "Drop-in Adult Sports", spots: 4, cap: 30, ages: "16+",
+    desc: "Full-court pick-up games, teams rotate every ten minutes. Non-marking indoor shoes required." },
+  { id: 7, day: "today", start: "7:30 PM", end: "9:00 PM", title: "Public Skate", cat: "Skating", venue: "Queen's Park Arena", room: "Arena", price: "$4.00", program: "Drop-in Skating", spots: 0, cap: 100, cancelled: true, ages: "All ages",
+    desc: "This session has been cancelled by the city. It stays on the schedule so anyone who saw it earlier can tell it was cancelled rather than removed." },
+  { id: 8, day: "sat", start: "9:00 AM", end: "10:00 AM", title: "Parent & Tot Skate", cat: "All Ages", venue: "Poirier Sport & Leisure Complex", room: "Ice Arena 1", price: "$4.00", program: "Drop-in Skating", spots: 30, cap: 40, ages: "0–5 with an adult",
+    desc: "A quiet hour of ice for little skaters and one adult each. Helmets required; skate aids available at the gate." },
+  { id: 9, day: "sat", start: "10:00 AM", end: "12:00 PM", title: "Drop-in Pickleball", cat: "Pickleball", venue: "Poirier Sport & Leisure Complex", room: "Gymnasium 2", price: "$0.00 – $6.50", program: "Drop-in Adult & Senior Sports", spots: 2, cap: 32, ages: "Adult & senior, beginner to intermediate",
+    desc: "For adult and senior players. Enjoy the game of pickleball, meet some friends and have loads of fun in this drop-in program. Only registered participants allowed in the gym space during the program time." },
+  { id: 10, day: "sat", start: "10:15 AM", end: "11:15 AM", title: "Deep Water Aquafit", cat: "Fitness", venue: "City Centre Aquatic Complex", room: "Leisure Pool", price: "$7.00", program: "Drop-in Aquatics", spots: 8, cap: 25, ages: "19+",
+    desc: "A no-impact workout in deep water with belts provided. Comfort in deep water is required; no swimming skill needed." },
+  { id: 11, day: "sat", start: "11:00 AM", end: "1:00 PM", title: "Golf Range Buy-On", cat: "Golf", venue: "Westwood Plateau Practice Centre", room: "Driving Range", price: "$12.00", program: "Drop-in Golf", spots: 40, cap: 48, ages: "All ages",
+    desc: "Two hours on the covered range including a bucket of balls. Clubs to rent at the counter." },
+  { id: 12, day: "sat", start: "2:00 PM", end: "4:00 PM", title: "Youth Volleyball", cat: "All Ages", venue: "Pinetree Community Centre", room: "Gymnasium", price: "$2.00", program: "Youth drop-in", spots: 0, cap: 24, ages: "11–18",
+    desc: "Coached games for youth of any experience level. Bring indoor shoes and a water bottle." }
+];
+
+const DAYS = [
+  { key: "today", label: "Today · Friday, September 11" },
+  { key: "sat", label: "Tomorrow · Saturday, September 12" }
+];
+
+function km(ll) {
+  const dy = (ll[0] - YOU[0]) * 111;
+  const dx = (ll[1] - YOU[1]) * 111 * Math.cos((YOU[0] * Math.PI) / 180);
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function mins(t) {
+  const m = t.match(/(\d+):(\d+)\s*(AM|PM)/);
+  let h = parseInt(m[1], 10) % 12;
+  if (m[3] === "PM") h += 12;
+  return h * 60 + parseInt(m[2], 10);
+}
+
+class Component extends DCLogic {
+  state = {
+    cat: "All activities", area: "", loc: "", q: "",
+    hideFull: true, favOnly: false, view: "list", sort: "time",
+    sel: 1, fav: { 9: true }, tip: true
+  };
+
+  componentDidMount() { this.syncMap(); }
+  componentDidUpdate() { this.syncMap(); }
+
+  enriched() {
+    return DATA.map((s) => {
+      const v = VENUES[s.venue];
+      const d = km(v.ll);
+      return Object.assign({}, s, { area: v.area, ll: v.ll, distKm: d, sortT: mins(s.start), full: s.spots === 0 });
+    });
+  }
+
+  visible() {
+    const st = this.state;
+    const q = st.q.trim().toLowerCase();
+    let out = this.enriched().filter((s) => {
+      if (st.cat !== "All activities" && s.cat !== st.cat) return false;
+      if (st.area && s.area !== st.area) return false;
+      if (st.loc && s.venue !== st.loc) return false;
+      if (q && !(s.title + " " + s.venue + " " + s.cat).toLowerCase().includes(q)) return false;
+      if (st.hideFull && s.full && !s.cancelled) return false;
+      if (st.favOnly && !st.fav[s.id]) return false;
+      return true;
+    });
+    if (st.sort === "near") out.sort((a, b) => a.distKm - b.distKm || a.sortT - b.sortT);
+    else out.sort((a, b) => a.sortT - b.sortT);
+    return out;
+  }
+
+  badge(s) {
+    if (s.cancelled) return { text: "Cancelled", fg: "#595d6c", bg: "#e4e7f5", bd: "#b2b6ca" };
+    if (s.full) return { text: "Full", fg: "#75798c", bg: "#eef0fa", bd: "#c3c8e0" };
+    return { text: s.spots + " spots left", fg: "#0a5f57", bg: "#e3f6f3", bd: "#8fd8cd" };
+  }
+
+  badgeStyle(s) {
+    const b = this.badge(s);
+    return "font-size: 11px; line-height: 1.3; padding: 3px 8px; border-radius: 999px; white-space: normal; text-align: center; color: " + b.fg + "; background: " + b.bg + "; border: 1px solid " + b.bd + ";";
+  }
+
+  starStyle(on, big) {
+    const size = big ? "30px" : "18px";
+    return "flex: 0 0 auto; width: " + size + "; height: " + size + "; display: flex; align-items: center; justify-content: center; padding: 0; border: 0; border-radius: 6px; background: transparent; cursor: pointer; font-size: " + (big ? "17px" : "14px") + "; line-height: 1; color: " + (on ? "#0c7a70" : "#a3a7bd") + ";";
+  }
+
+  pill(active) {
+    return "height: 26px; padding: 0 11.2px; border: 0; border-radius: 6px; font-family: inherit; font-size: 12.5px; cursor: pointer; background: " + (active ? "#e3f6f3" : "transparent") + "; color: " + (active ? "#0a5f57" : "rgba(255,247,239,0.75)") + ";";
+  }
+
+  select(id) { this.setState({ sel: id }); }
+
+  toggleFav(id, e) {
+    if (e) e.stopPropagation();
+    this.setState((s) => {
+      const fav = Object.assign({}, s.fav);
+      if (fav[id]) delete fav[id]; else fav[id] = true;
+      return { fav };
+    });
+  }
+
+  syncMap() {
+    if (this.state.view !== "map" || !this._mapEl || !window.L) return;
+    if (!this._map) {
+      this._map = window.L.map(this._mapEl, { zoomControl: true }).setView([49.262, -122.85], 12);
+      window.L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
+        attribution: '&copy; OpenStreetMap, &copy; CARTO', maxZoom: 19
+      }).addTo(this._map);
+      this._layer = window.L.layerGroup().addTo(this._map);
+    }
+    this._layer.clearLayers();
+    const byVenue = {};
+    this.visible().forEach((s) => {
+      byVenue[s.venue] = byVenue[s.venue] || { ll: s.ll, n: 0, open: 0, list: [] };
+      byVenue[s.venue].n += 1;
+      if (!s.full && !s.cancelled) byVenue[s.venue].open += 1;
+      byVenue[s.venue].list.push(s);
+    });
+    Object.keys(byVenue).forEach((name) => {
+      const v = byVenue[name];
+      const open = v.open > 0;
+      const color = open ? "#0c7a70" : "#c3c8e0";
+      const textColor = open ? "#fbfcff" : "#3f424d";
+      const icon = window.L.divIcon({
+        className: "",
+        html: '<div style="width:30px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;font:500 12px Inter,sans-serif;color:' + textColor + ';background:' + color + ';box-shadow:0 0 0 3px rgba(238,240,250,.9),0 0 14px rgba(15,148,136,.35)">' + v.n + "</div>",
+        iconSize: [30, 30], iconAnchor: [15, 15]
+      });
+      const rows = v.list.slice(0, 4).map((s) => "<div style='font-size:12px;color:#595d6c'>" + s.start + " · " + s.title + "</div>").join("");
+      window.L.marker(v.ll, { icon })
+        .bindPopup("<div style='font:500 13px Inter,sans-serif;color:#1c1e27;margin-bottom:4px'>" + name + "</div>" + rows)
+        .addTo(this._layer);
+    });
+    setTimeout(() => { if (this._map) this._map.invalidateSize(); }, 30);
+  }
+
+  renderVals() {
+    const st = this.state;
+    const all = this.enriched();
+    const vis = this.visible();
+    const dist = (d) => d.toFixed(d < 10 ? 1 : 0) + " km away";
+
+    const groups = DAYS.map((d) => {
+      const sessions = vis.filter((s) => s.day === d.key).map((s) => {
+        const on = !!st.fav[s.id];
+        const picked = st.sel === s.id;
+        return {
+          start: s.start, end: s.end, title: s.title, cat: s.cat,
+          venue: s.venue + " · " + s.room, dist: dist(s.distKm), price: s.price,
+          badge: this.badge(s).text, badgeStyle: this.badgeStyle(s),
+          starGlyph: on ? "★" : "☆", starStyle: this.starStyle(on, false),
+          titleStyle: "margin: 0; flex: 1 1 auto; min-width: 0; font-family: var(--font-heading); font-weight: 500; font-size: 14.5px; letter-spacing: -0.005em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: " + (s.cancelled ? "#9397ab" : "#1c1e27") + "; text-decoration: " + (s.cancelled ? "line-through" : "none") + ";",
+          cardStyle: "gap: 16.8px; padding: 11.2px 14px; border-radius: 8px; cursor: pointer; background: " + (picked ? "#e3f6f3" : "#fbfcff") + "; box-shadow: inset 0 0 0 1px " + (picked ? "#8fd8cd" : "#e4e7f5") + "; border-left: 2px solid " + (picked ? "#0f9488" : "transparent") + ";",
+          select: () => this.select(s.id),
+          star: (e) => this.toggleFav(s.id, e)
+        };
+      });
+      return { label: d.label, count: sessions.length + (sessions.length === 1 ? " session" : " sessions"), sessions };
+    }).filter((g) => g.sessions.length > 0);
+
+    const catNames = ["All activities"].concat(Array.from(new Set(all.map((s) => s.cat))).sort());
+    const cats = catNames.map((name) => {
+      const active = st.cat === name;
+      const count = name === "All activities" ? all.length : all.filter((s) => s.cat === name).length;
+      return {
+        name, count, active,
+        style: "display: flex; align-items: center; gap: 8.4px; width: 100%; text-align: left; padding: 6px 8.4px; border: 0; border-radius: 6px; font-family: inherit; font-size: 13px; cursor: pointer; background: " + (active ? "#e3f6f3" : "transparent") + "; color: " + (active ? "#0a5f57" : "#53566a") + ";",
+        countStyle: "margin-left: auto; font-size: 11.5px; font-variant-numeric: tabular-nums; color: " + (active ? "#0c7a70" : "#8a8ea3") + ";",
+        select: () => this.setState({ cat: name })
+      };
+    });
+
+    const areaNames = Array.from(new Set(all.map((s) => s.area))).sort();
+    const venueNames = Array.from(new Set(all.filter((s) => !st.area || s.area === st.area).map((s) => s.venue))).sort();
+
+    const s = all.find((x) => x.id === st.sel);
+    let sel = null;
+    if (s) {
+      const on = !!st.fav[s.id];
+      const pct = Math.round(((s.cap - s.spots) / s.cap) * 100);
+      const others = all.filter((x) => x.title === s.title && x.id !== s.id).map((x) => ({
+        when: (x.day === "today" ? "Today" : "Sat Sep 12") + " · " + x.start + " – " + x.end,
+        spots: x.cancelled ? "Cancelled" : x.full ? "Full" : x.spots + " left",
+        select: () => this.select(x.id)
+      }));
+      sel = {
+        title: s.title, cat: s.cat, desc: s.desc,
+        badge: this.badge(s).text, badgeStyle: this.badgeStyle(s),
+        starGlyph: on ? "★" : "☆", starStyle: this.starStyle(on, true),
+        barStyle: "height: 100%; width: " + pct + "%; background: " + (s.cancelled || s.full ? "#9397ab" : "linear-gradient(90deg, #0a5f57, #0f9488)") + ";",
+        capacityLabel: s.cancelled ? "Not running — capacity not applicable" : (s.cap - s.spots) + " of " + s.cap + " places taken",
+        facts: [
+          { k: "When", v: (s.day === "today" ? "Today, Fri Sep 11" : "Sat Sep 12") + " · " + s.start + " – " + s.end },
+          { k: "Where", v: s.venue + " — " + s.room + " · " + dist(s.distKm) },
+          { k: "Price", v: s.price },
+          { k: "Who", v: s.ages },
+          { k: "Program", v: s.program }
+        ],
+        others, noOthers: others.length === 0,
+        cta: s.cancelled ? "Open the city's page" : s.full ? "See the city's page" : "Register / Pay",
+        ctaNote: s.full && !s.cancelled
+          ? "This session is full. The city's own page opens in a new tab — star it and you'll hear the moment a place frees up."
+          : "Opens the city's booking system in a new tab. Times and spaces are read from it directly."
+      };
+    }
+
+    const compact = this.props.density === "compact";
+    const radiusPx = (this.props.cardRadius ?? 14) + "px";
+    const panelPad = compact ? "11.2px" : "16.8px";
+    const panelGap = compact ? "11.2px" : "16.8px";
+    const rowGap = compact ? "11.2px" : "16.8px";
+
+    return {
+      groups, cats, sel,
+      hasSel: !!sel, noSel: !sel,
+      isEmpty: vis.length === 0,
+      isList: st.view === "list", isMap: st.view === "map",
+      q: st.q, area: st.area, loc: st.loc, hideFull: st.hideFull, favOnly: st.favOnly,
+      showTip: st.tip,
+      showTipBanner: (this.props.showWatchTip ?? true) && st.tip,
+      radius: radiusPx, panelPad, panelGap,
+      rowStyle: "display: flex; flex-wrap: wrap; align-items: stretch; flex: 1 1 auto; min-height: 0; gap: " + rowGap + "; padding: clamp(10px, 2.5vw, " + rowGap + ") clamp(14px, 4vw, 22.4px);",
+      updatedLabel: "Updated 12:57 PM · 3 cities",
+      resultLabel: vis.length + (vis.length === 1 ? " session" : " sessions") + " in the next 7 days",
+      areas: [{ value: "", label: "All areas" }].concat(areaNames.map((a) => ({ value: a, label: a }))),
+      venues: [{ value: "", label: "All venues" }].concat(venueNames.map((v) => ({ value: v, label: v }))),
+      listBtnStyle: this.pill(st.view === "list"),
+      mapBtnStyle: this.pill(st.view === "map"),
+      sortTimeStyle: this.pill(st.sort === "time"),
+      sortNearStyle: this.pill(st.sort === "near"),
+      showList: () => this.setState({ view: "list" }),
+      showMap: () => this.setState({ view: "map" }),
+      sortTime: () => this.setState({ sort: "time" }),
+      sortNear: () => this.setState({ sort: "near" }),
+      setQ: (e) => this.setState({ q: e.target.value }),
+      setArea: (e) => this.setState({ area: e.target.value, loc: "" }),
+      setLoc: (e) => this.setState({ loc: e.target.value }),
+      toggleHideFull: (e) => this.setState({ hideFull: e.target.checked }),
+      toggleFavOnly: (e) => this.setState({ favOnly: e.target.checked }),
+      clearAll: () => this.setState({ cat: "All activities", area: "", loc: "", q: "", hideFull: false, favOnly: false }),
+      dismissTip: () => this.setState({ tip: false }),
+      refresh: () => this.forceUpdate(),
+      starSel: () => this.toggleFav(st.sel),
+      mapRef: (el) => { this._mapEl = el; if (el) this.syncMap(); }
+    };
+  }
+}
+
+</script>
+</body>
+</html>
