@@ -67,12 +67,8 @@ _WEEKDAYS = {
 #
 # Each city names its own categories, so this is keyed by the exact text a
 # city publishes, and two cities need not agree: Port Coquitlam prefixes
-# everything "Drop-in - ", Burnaby does not, West Vancouver uses a
-# "Group: Specific" form. A category that is missing here is not an error —
-# the source's own "activity_type" is used instead.
-#
-# Keys are compared after HTML-unescaping, because some portals publish the
-# name entity-encoded ("Fitness &amp; Health") and others don't.
+# everything "Drop-in - ", Burnaby does not. A category that is missing
+# here is not an error — the source's own "activity_type" is used instead.
 CATEGORY_ACTIVITY_TYPES = {
     # City of Port Coquitlam
     "Drop-in - Aquatics": "Swimming",
@@ -84,49 +80,16 @@ CATEGORY_ACTIVITY_TYPES = {
     "Drop-in - Seniors": "Adult",
     # City of Burnaby
     "Golf": "Golf",
-    # District of West Vancouver. Its categories are not drop-in-specific —
-    # the source filters on the portal's "Daily Activities and Drop-Ins"
-    # type instead — so the swim-lesson and hockey-lesson categories are
-    # mapped too: a lesson that is genuinely droppable-into still belongs
-    # under the sport it teaches.
-    "Skating: Public Skate": "Skating",
-    "Skating: Drop-in Hockey": "Skating",
-    "Skating: Stick and Puck": "Skating",
-    "Skating: Skate Lessons": "Skating",
-    "Skating: Hockey Lessons": "Skating",
-    "Swimming: Aquafit": "Swimming",
-    "Swimming: Masters Swim": "Swimming",
-    "Swimming: Swim Lessons": "Swimming",
-    "Health and Fitness: Group Fitness": "Fitness",
-    "Health and Fitness: Group Fitness Plus": "Fitness",
-    "Health and Fitness: CycleFit": "Fitness",
-    "Health and Fitness: Mind Body Wellness": "Fitness",
-    "Health and Fitness: Pilates": "Fitness",
-    "Health and Fitness: Yoga": "Fitness",
-    "Health and Fitness: Active Rehab": "Fitness",
-    "Gymnastics: Gymnastics Drop-ins": "All Ages",
-    "Sports: Badminton": "Badminton",
-    "Sports: Basketball": "Basketball",
-    "Sports: Pickleball": "Pickleball",
-    "Sports: Table Tennis": "Table Tennis",
-    "Sports: Volleyball": "Volleyball",
-    "Sports: Soccer": "Soccer",
-    "Sports: Tennis": "Sports",
-    "Sports: Fencing": "Sports",
-    "Sports: Martial Arts": "Sports",
-    "Sports: Outdoor Rec": "Sports",
-    "Sports: General": "Sports",
-    "Sports: Golf": "Golf",
 }
 
-# Vancouver and West Vancouver are deliberately absent above. Both name
+# Vancouver and West Vancouver are deliberately absent. Both name
 # categories in their filters endpoint and then send none on the rows
 # themselves — 120 of 120 sampled rows across both, from three buildings
 # each, carried an empty category. Entries for them were written and then
 # removed: they could never have fired, and a mapping that cannot fire is
 # worse than no mapping, because it reads like the case is handled.
 #
-# Those two cities are typed from the event name instead, by
+# Those two are typed from the event name instead, by
 # events.classify_activity, which is why its patterns cover swimming,
 # skating and fitness and not only the court sports.
 
@@ -136,71 +99,29 @@ _TAG_RE = re.compile(r"<[^>]+>")
 # (Purple)") where the prefix is scheduling bookkeeping, not a place name.
 _PROGRAM_LOCATION_RE = re.compile(r"^\s*program location:\s*", re.I)
 
-# Some portals prefix a building with a bullet character to sort it to the
-# top of their own picker ("*Britannia Community Centre"). That is display
-# bookkeeping, not part of the name, so it is ignored when deciding whether
-# a row's label is just repeating the building it is already filtered to.
-_DECORATION_RE = re.compile(r"^[\s*•\-]+")
+# Vancouver prefixes every centre with an asterisk ("*Trout Lake Rink").
+# It is bookkeeping in their system, not part of the name anyone uses.
+_VENUE_PREFIX_RE = re.compile(r"^\*+\s*")
+
+# Vancouver also wraps its drop-in titles in pipes, "|Public Skate|", which
+# is presumably how they flag them internally. Only a *surrounding* pair is
+# removed: Burnaby's names use pipes as separators ("Jr Golf | Play | ...")
+# and must be left alone.
+_WRAPPED_NAME_RE = re.compile(r"^\|\s*(.*?)\s*\|$")
 
 # Portals abbreviate the same building differently from how they name it in
-# their own picker: "Port Coquitlam Cmty Centre" for "Port Coquitlam
-# Community Centre", "*Britannia Cmty Centre" for "Britannia Community
-# Centre". Expanding the abbreviation is what makes those compare equal
-# without every city having to list its own spellings by hand.
+# their own picker: "Port Coquitlam Cmty Centre" against "Port Coquitlam
+# Community Centre". Expanding the abbreviation is what makes those compare
+# equal without every city listing its own spellings by hand.
 _ABBREVIATIONS = ((r"\bcmty\b", "community"), (r"\brec\b", "recreation"))
 
 
 def _venue_key(name: str) -> str:
     """A building name reduced to what actually identifies it."""
-    key = _DECORATION_RE.sub("", name or "").strip().casefold()
+    key = _VENUE_PREFIX_RE.sub("", name or "").strip().casefold()
     for pattern, expansion in _ABBREVIATIONS:
         key = re.sub(pattern, expansion, key)
     return key
-
-
-# Wording a portal uses when it means "turn up", for the sources that have
-# to be filtered here rather than server-side.
-_DROP_IN_NAME_RE = re.compile(r"\bdrop\s?-?\s?in\b|\bshinny\b|\bopen\s+gym\b", re.I)
-
-
-def is_drop_in(raw: dict) -> bool:
-    """Whether an ActiveNet row is something you can just turn up to.
-
-    Only for portals that answer this nowhere else. West Vancouver tags its
-    activities with a "Daily Activities and Drop-Ins" type and is filtered
-    on that instead, server-side, which is strictly better. Vancouver
-    publishes no types, sends no category, and marks nothing on the row —
-    allow_drop_in_reg is False even on other cities' plainest drop-ins — so
-    the only thing left is the shape of what it publishes.
-
-    That shape turns out to be clear. Vancouver lists a drop-in as one row
-    per session with no end date, repeated for each date it runs:
-
-        Badminton                  2026-09-14..          Mon
-        Badminton                  2026-09-21..          Mon
-        Basketball - Full Court    2026-09-15..          Tue
-
-    and a registered course as a single row spanning its whole term:
-
-        Ageless Training - Set One 2026-09-08..2026-10-27 Tue
-        Journey Basketball         2026-09-08..2026-11-24 Tue
-
-    So a row covering exactly one date is a drop-in. A row spanning a range
-    is a course *unless* it says otherwise in its name, which is what keeps
-    the term-long ones ("Friday Youth Badminton Drop-In", running September
-    to December) rather than throwing them out with the leagues.
-
-    This is a judgement about someone else's data and it is not free: a
-    term-long drop-in that doesn't say "drop-in" in its title is dropped.
-    Erring that way is deliberate — a missing session is a quieter
-    dashboard, and a registered ten-week course shown as a drop-in is a
-    wasted trip.
-    """
-    if _DROP_IN_NAME_RE.search(raw.get("name") or ""):
-        return True
-    start = (raw.get("date_range_start") or "").strip()
-    end = (raw.get("date_range_end") or "").strip()
-    return not end or end == start
 
 
 def _build_session() -> requests.Session:
@@ -259,8 +180,21 @@ def _search_page(
             "date_after": date_from.isoformat(),
             "date_before": date_to.isoformat(),
             "activity_category_ids": list(source.get("category_ids", [])),
+            # Some portals keep drop-ins on their own axis rather than in
+            # the category names: West Vancouver tags them "Daily
+            # Activities and Drop-Ins", type 6. Where that exists it is the
+            # best filter there is — the portal's own answer to "what can I
+            # turn up to" — so a category it invents later is included
+            # automatically instead of being missed by a hand-written list.
             "activity_type_ids": list(source.get("type_ids", [])),
             "center_ids": [source["center_id"]] if source.get("center_id") else [],
+            # Server-side name search. Some portals publish drop-ins mixed
+            # into a catalogue that is overwhelmingly registered courses —
+            # Vancouver lists 6,900 activities in a fortnight, of which the
+            # drop-ins are a rounding error — and there is no "drop-in"
+            # filter to ask for. Narrowing by name at the source fetches a
+            # few pages instead of a few hundred.
+            "activity_keyword": source.get("keyword", ""),
         },
         "activity_transfer_pattern": {},
     }
@@ -306,6 +240,15 @@ def _split_time_range(text: str) -> tuple[str, str]:
     return _parse_time(parts[0]) if parts else "", ""
 
 
+def _weekdays(raw: dict) -> set:
+    """The weekday numbers an activity runs on, from its "Mon,Wed,Fri" field."""
+    return {
+        _WEEKDAYS[token.strip()[:3].lower()]
+        for token in re.split(r"[,/&]| and ", raw.get("days_of_week") or "")
+        if token.strip()[:3].lower() in _WEEKDAYS
+    }
+
+
 def _occurrence_dates(raw: dict, window_start: dt.date, window_end: dt.date) -> list[dt.date]:
     """Every date this activity actually runs inside the window.
 
@@ -319,9 +262,24 @@ def _occurrence_dates(raw: dict, window_start: dt.date, window_end: dt.date) -> 
     That expansion can therefore show a session on a date the city later
     cancelled. Every card links back to the portal, which is authoritative.
     """
+    weekdays = _weekdays(raw)
+
     start_text = (raw.get("date_range_start") or "").strip()
     if not start_text:
-        return []
+        # An open-ended weekly schedule: no start date, no end date, just
+        # the days it runs on. Vancouver publishes its pool drop-ins this
+        # way — "Evening Public Swim, Tue and Thu", dateless, because it
+        # simply runs until further notice. Returning nothing for these
+        # dropped every public swim in the city. "Every Tuesday" with no
+        # end means every Tuesday in the window being asked about.
+        if not weekdays:
+            return []
+        span = (window_end - window_start).days
+        return [
+            day
+            for day in (window_start + dt.timedelta(days=n) for n in range(span + 1))
+            if day.weekday() in weekdays
+        ]
     try:
         start = dt.date.fromisoformat(start_text)
     except ValueError:
@@ -343,11 +301,6 @@ def _occurrence_dates(raw: dict, window_start: dt.date, window_end: dt.date) -> 
     if start == end:
         return [start]
 
-    weekdays = {
-        _WEEKDAYS[token.strip()[:3].lower()]
-        for token in re.split(r"[,/&]| and ", raw.get("days_of_week") or "")
-        if token.strip()[:3].lower() in _WEEKDAYS
-    }
     if not weekdays:
         return []
 
@@ -368,6 +321,12 @@ def _spots_and_status(raw: dict) -> tuple[str, str]:
     front end a second dialect.
     """
     text = str(raw.get("openings") or "").strip()
+    # A session with no cap. Left as a bare word it read as neither open nor
+    # full, so it was shown with a neutral badge and hidden by any
+    # open-only filter — the opposite of the truth, which is that anyone
+    # can walk in.
+    if text.casefold() == "unlimited":
+        return "Space available", "Register"
     try:
         openings = int(text)
     except ValueError:
@@ -391,14 +350,22 @@ def _normalize(raw: dict, source: dict, day: dt.date) -> Event:
     # card never shows a shortened spelling of the heading above it.
     room = ((raw.get("location") or {}).get("label") or "").strip()
     room = _PROGRAM_LOCATION_RE.sub("", room).strip()
-    room = _DECORATION_RE.sub("", room).strip()
-    location = source["location"]
-    if _venue_key(room) in {
+    room = _VENUE_PREFIX_RE.sub("", room).strip()
+
+    location = source.get("location") or ""
+    if not location:
+        # No venue named in config, so the row names it. A search that is
+        # not filtered to one building returns rows from all of them, which
+        # makes the label the building rather than a room inside it — the
+        # inverse of the case below. Keyword sources work this way: there
+        # is no single venue to put in config.
+        location, room = room, ""
+    elif _venue_key(room) in {
         _venue_key(alias) for alias in (location, *source.get("center_aliases", ()))
     }:
         room = ""
 
-    event_name = (raw.get("name") or "").strip()
+    event_name = _WRAPPED_NAME_RE.sub(r"\1", (raw.get("name") or "").strip()).strip()
     fallback = CATEGORY_ACTIVITY_TYPES.get(
         html.unescape((raw.get("category") or "").strip()),
         source.get("activity_type", "Other"),
@@ -429,6 +396,19 @@ def _normalize(raw: dict, source: dict, day: dt.date) -> Event:
     )
 
 
+def _excluded(source: dict, event_name: str) -> bool:
+    """Whether a source's optional `exclude` pattern rejects this name.
+
+    A name search casts a slightly wider net than intended: searching a
+    pool's "Length Swim" also returns the block where the lanes are given
+    over to "Lessons/Swim Club", which is the opposite of something you can
+    drop in to. Cheaper than inventing a rule for it, and visible in config
+    next to the search that needs it.
+    """
+    pattern = source.get("exclude")
+    return bool(pattern and re.search(pattern, event_name or "", re.I))
+
+
 def fetch_calendar_events(source: dict, days_ahead: int) -> list[Event]:
     """Fetch and normalize drop-ins for a single ActiveNet centre."""
     # Same reasoning as the PerfectMind module: "today" is the venue's own
@@ -450,7 +430,7 @@ def fetch_calendar_events(source: dict, days_ahead: int) -> list[Event]:
             break
 
         for raw in items:
-            if source.get("drop_ins_only") and not is_drop_in(raw):
+            if _excluded(source, raw.get("name") or ""):
                 continue
             activity_id = str(raw.get("id") or "")
             if activity_id and activity_id in seen_ids:

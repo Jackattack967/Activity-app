@@ -174,12 +174,13 @@ decides how much work a city is:
   adds a category.
 - **Nothing says it** (Vancouver: no types, no category on the row, and
   `allow_drop_in_reg` is `False` even on other cities' plainest drop-ins) —
-  then it has to be worked out from the shape of what the portal publishes,
-  which is what `drop_ins_only` in `config.py` turns on. For Vancouver a
-  drop-in is one row per session with no end date, and a course is one row
-  spanning its term. Check this per city rather than assuming: it is a
-  guess about someone else's data, and `check_sources.py` is how you find
-  out whether the guess holds.
+  then ask for the drop-ins by name. A source can set a `keyword`, which
+  ActiveNet applies server-side, plus an `exclude` pattern for what the
+  search overshoots into. Vancouver is configured this way, with one search
+  per kind of drop-in; it lists 6,900 activities a fortnight and pulling
+  whole categories would mean ~120 pages of lesson listings to find a few
+  dozen drop-ins. Searches may overlap — `scraper.py` drops a session an
+  earlier source already returned.
 
 Two more things those portals do that cost an afternoon each:
 

@@ -9,17 +9,18 @@ turns a portal's wording into an Event can be checked without hitting a
 city's servers or depending on what happens to be scheduled today.
 """
 import datetime as dt
-import json
 import os
 import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import json
+
 import config
 import scraper
-from events import classify_activity
 import scraper_activenet as an
+from events import classify_activity
 
 FAIL = []
 
@@ -143,9 +144,17 @@ check(
     ),
     [],
 )
+# No dates at all, just weekdays: an open-ended weekly schedule that runs
+# until further notice. This is how Vancouver publishes its pool drop-ins,
+# and reading it as "no occurrences" dropped every public swim in the city.
 check(
-    "a missing start date is survivable",
+    "no dates but weekdays means every such day in the window",
     an._occurrence_dates({"date_range_start": "", "days_of_week": "Tue"}, start, window_end),
+    [dt.date(2026, 9, 8), dt.date(2026, 9, 15)],
+)
+check(
+    "no dates and no weekdays is still nothing",
+    an._occurrence_dates({"date_range_start": "", "days_of_week": ""}, start, window_end),
     [],
 )
 check(
@@ -283,30 +292,35 @@ ev = an._normalize(
 )
 check("a fitness class named after golf stays fitness", ev.activity_type, "Fitness")
 
-print("\n11. EVERY ACTIVENET VENUE CAN BE PUT ON THE MAP")
-# An ActiveNet source names its building in config rather than reading it
-# from the portal, so a typo there is invisible: the events still arrive and
-# only the map marker quietly goes missing. PerfectMind sources are not
-# checked here, because they learn their venue names by scraping.
+print("\n11. EVERY CONFIGURED VENUE CAN BE PUT ON THE MAP")
+# A building-based ActiveNet source names its venue in config rather than
+# reading it from the portal, so a typo there is invisible: the events still
+# arrive and only the map marker quietly goes missing.
+#
+# Only sources that declare a venue can be checked this way. PerfectMind
+# sources learn their venue names by scraping, and Vancouver's searches are
+# not pinned to a building at all — for both, an unknown venue simply gets
+# no marker (see _with_place in app.py), a missing pin rather than a
+# broken page.
 #
 # A venue may legitimately have no coordinates yet — it simply gets no pin —
-# but it has to say so in VENUES_AWAITING_COORDS. That is the whole point:
-# an unmapped venue and a mistyped one look identical on the map, so the
+# but it has to say so in VENUES_AWAITING_COORDS. That is the point: an
+# unmapped venue and a mistyped one look identical on the map, so the
 # deliberate one is the one that is written down.
-_activenet_venues = {
-    s["location"] for s in config.SOURCES if s.get("platform") == "activenet"
+_declared_venues = {
+    s["location"]
+    for s in config.SOURCES
+    if s.get("platform") == "activenet" and s.get("location")
 }
 check(
-    "every ActiveNet venue is either mapped or declared unmapped",
+    "every configured venue is either mapped or declared unmapped",
     sorted(
-        _activenet_venues
-        - set(config.FACILITY_COORDS)
-        - config.VENUES_AWAITING_COORDS
+        _declared_venues - set(config.FACILITY_COORDS) - config.VENUES_AWAITING_COORDS
     ),
     [],
 )
-# The other direction: an entry left behind here after its coordinates land,
-# or a name that no source uses, would quietly re-open the gap this closes.
+# The other direction: an entry left behind after its coordinates land, or a
+# name no source uses, would quietly re-open the gap this closes.
 check(
     "nothing is both mapped and declared unmapped",
     sorted(config.VENUES_AWAITING_COORDS & set(config.FACILITY_COORDS)),
@@ -314,7 +328,7 @@ check(
 )
 check(
     "no stale names are declared unmapped",
-    sorted(config.VENUES_AWAITING_COORDS - _activenet_venues),
+    sorted(config.VENUES_AWAITING_COORDS - _declared_venues),
     [],
 )
 
@@ -465,11 +479,111 @@ ev = an._normalize(golf_row, GOLF_SOURCE, dt.date(2026, 9, 12))
 check("and leaves an ordinary session alone", ev.cancelled, False)
 
 
-print("\n16. EVERY AREA HAS ITS OWN COLOUR ON THE MAP")
+print("\n16. VANCOUVER IS CONFIGURED BY SEARCH, NOT BY BUILDING")
+# Vancouver publishes ~6,900 activities a fortnight and offers no "drop-in"
+# filter, so its entries are name searches rather than one-per-building.
+# That means two things the building-based sources never do: the venue
+# arrives on each row instead of from config, and two searches can return
+# the same session.
+VAN = [s for s in config.SOURCES if s["source_name"] == "City of Vancouver"]
+check("Vancouver has search-based sources", len(VAN) > 0, True)
+check(
+    "none of them names a venue in config",
+    [s["calendar_label"] for s in VAN if s.get("location")],
+    [],
+)
+check(
+    "and none pins a building either",
+    [s["calendar_label"] for s in VAN if s.get("center_id")],
+    [],
+)
+check("every one carries a keyword", all(s.get("keyword") for s in VAN), True)
+
+# The row supplies the building when config doesn't, with Vancouver's
+# asterisk and its pipe-wrapped title both stripped.
+SEARCH_SOURCE = {
+    "source_name": "City of Vancouver",
+    "platform": "activenet",
+    "keyword": "Public Skate",
+    "calendar_label": "Drop-in \u2014 Public Skate",
+    "activity_type": "Skating",
+}
+row = {
+    "name": "|Public Skate|",
+    "category": "",
+    "time_range": "12:45 PM - 2:15 PM",
+    "openings": "100",
+    "number": "625920",
+    "desc": "",
+    "detail_url": "https://example.invalid/a/1",
+    "location": {"label": "*Trout Lake Rink"},
+}
+ev = an._normalize(row, SEARCH_SOURCE, dt.date(2026, 9, 19))
+check("the row's label becomes the building", ev.location, "Trout Lake Rink")
+check("so there is no room to show", ev.facility, "Trout Lake Rink")
+check("the wrapping pipes come off the title", ev.event_name, "Public Skate")
+check("and the source's type still applies", ev.activity_type, "Skating")
+
+# Burnaby's titles use pipes as separators and must survive untouched.
+ev = an._normalize(
+    {**row, "name": "Jr Golf | Play (age 8-10) | Skills Development"},
+    SEARCH_SOURCE, dt.date(2026, 9, 19),
+)
+check(
+    "pipes inside a title are left alone",
+    ev.event_name,
+    "Jr Golf | Play (age 8-10) | Skills Development",
+)
+
+print("\n17. A SEARCH CAN OVERSHOOT, AND SEARCHES CAN OVERLAP")
+check(
+    "an excluded name is rejected",
+    an._excluded({"exclude": r"lesson|swim club"}, "Lessons/Swim Club | 1L Lengths"),
+    True,
+)
+check(
+    "a real drop-in is kept",
+    an._excluded({"exclude": r"lesson|swim club"}, "Length Swim (25m)"),
+    False,
+)
+check("no pattern rejects nothing", an._excluded({}, "Anything at all"), False)
+
+# Two searches returning one session must not list it twice.
+def _ev(course_id, name="Open Gym Drop-In"):
+    return events.Event(
+        activity_type="Sports", event_name=name, date="2026-09-18",
+        day_of_week="Friday", start_time="4:10 PM", end_time="5:10 PM",
+        facility="Renfrew Park Cmty Centre", location="Renfrew Park Cmty Centre",
+        price="", spots="10 spots left", status="Register",
+        source_name="City of Vancouver", calendar_label="x", course_id=course_id,
+    )
+import scraper as _s
+check(
+    "the same session from two searches collapses",
+    len(_s._without_duplicates([_ev("1"), _ev("1")])),
+    1,
+)
+check(
+    "two different activities that merely look alike do not",
+    len(_s._without_duplicates([_ev("1"), _ev("2")])),
+    2,
+)
+
+print("\n18. UNLIMITED CAPACITY IS OPEN, NOT UNKNOWN")
+# Vancouver marks uncapped sessions "Unlimited". Passed through as a bare
+# word it read as neither open nor full, so it wore a neutral badge and was
+# hidden by the hide-full filter — the opposite of the truth.
+spots, status = an._spots_and_status({"openings": "Unlimited"})
+check("phrased as available", spots, "Space available")
+check("and counted as open", watcher.is_open({"spots": spots, "status": status}), True)
+
+
+
+print("\n19. EVERY AREA HAS ITS OWN COLOUR ON THE MAP")
 # An area with no colour falls back to grey, which reads as "somewhere
 # else" rather than as a place. Adding a city and forgetting the colour is
 # a one-line omission with no error attached to it, and the bigger the city
-# the worse it looks — Vancouver was added and spent a day in grey.
+# the worse it looks.
 _colours = {
     name.strip(): colour
     for name, colour in re.findall(
@@ -487,14 +601,10 @@ check(
     sorted(set(_colours) - {a["name"] for a in config.AREAS}),
     [],
 )
-check(
-    "and no two areas share one",
-    len(set(_colours.values())),
-    len(_colours),
-)
+check("and no two areas share one", len(set(_colours.values())), len(_colours))
 
 
-print("\n17. A DROP-IN-ONLY SEARCH IS SENT WHEN THE PORTAL OFFERS ONE")
+print("\n20. A DROP-IN-ONLY SEARCH IS SENT WHEN THE PORTAL OFFERS ONE")
 # West Vancouver's categories name the subject, not whether you can turn up
 # ("Skating: Public Skate" and "Skating: Skate Lessons" are siblings), so
 # its sources filter on the portal's separate "Daily Activities and
@@ -527,10 +637,12 @@ an._search_page(
     _FakeSession(), WESTVAN_SOURCE, dt.date(2026, 9, 11), dt.date(2026, 9, 25), 1
 )
 check("the drop-in type filter reaches the portal", _sent.get("activity_type_ids"), ["6"])
-check("and the building filter still does", _sent.get("center_ids"), [WESTVAN_SOURCE["center_id"]])
+check(
+    "and the building filter still does",
+    _sent.get("center_ids"),
+    [WESTVAN_SOURCE["center_id"]],
+)
 
-# Port Coquitlam narrows by category instead and names no type. Sending an
-# empty list there is what keeps its search as wide as it has always been.
 POCO_SOURCE = next(
     s for s in config.SOURCES if s["source_name"] == "City of Port Coquitlam"
 )
@@ -541,8 +653,6 @@ check(
     _sent.get("activity_category_ids"),
     POCO_SOURCE["category_ids"],
 )
-
-# Every West Vancouver source has to carry the filter, not just the first.
 check(
     "no West Vancouver building is left unfiltered",
     sorted(
@@ -553,74 +663,39 @@ check(
     [],
 )
 
-print("\n18. A PORTAL'S OWN SPELLING IS NOT THE DASHBOARD'S")
-# Two things each portal does to names that would otherwise leak onto cards.
 
-# Vancouver sorts its buildings with a leading bullet. That is display
-# bookkeeping inside their picker, so a row labelled with it is still just
-# repeating the building it was already filtered to.
-STARRED = {**WESTVAN_SOURCE, "location": "Britannia Community Centre"}
-ev = an._normalize(
-    {**row, "location": {"label": "*Britannia Community Centre"}},
-    STARRED,
-    dt.date(2026, 9, 11),
+print("\n21. A PORTAL'S ABBREVIATION IS NOT THE DASHBOARD'S")
+# Every ActiveNet portal writes the building one way in its picker and
+# another on the row. Port Coquitlam's spelling was listed as an alias by
+# hand, which does not scale; expanding the abbreviation covers the rest.
+WV_CENTRE = next(
+    s for s in config.SOURCES if s.get("location") == "West Vancouver Community Centre"
 )
-check("a bulleted building name still collapses", ev.facility, "Britannia Community Centre")
-
-# West Vancouver's own names for two buildings are bare — "Aquatic Centre"
-# belongs to nobody on a dashboard spanning nine cities — so config renames
-# them and keeps the portal's spelling as an alias.
-ev = an._normalize(
-    {**row, "location": {"label": "Aquatic Centre"}},
-    next(
-        s
-        for s in config.SOURCES
-        if s.get("location") == "West Vancouver Aquatic Centre"
-    ),
-    dt.date(2026, 9, 11),
-)
-check("the portal's bare name collapses to the full one", ev.facility, "West Vancouver Aquatic Centre")
-
-# Every portal checked abbreviates the building in the row differently
-# from how it names it in its own picker. Port Coquitlam listed its own
-# spelling as an alias by hand; expanding the abbreviation is what stops
-# every city having to.
 for label in [
-    "*Britannia Cmty Centre",
-    "Britannia Cmty Centre",
-    "britannia community centre",
+    "West Vancouver Cmty Centre",
+    "*West Vancouver Cmty Centre",
+    "west vancouver community centre",
 ]:
     ev = an._normalize(
-        {**row, "location": {"label": label}}, STARRED, dt.date(2026, 9, 11)
+        {**row, "location": {"label": label}}, WV_CENTRE, dt.date(2026, 9, 11)
     )
-    check(f"{label!r} collapses", ev.facility, "Britannia Community Centre")
+    check(f"{label!r} collapses", ev.facility, "West Vancouver Community Centre")
 
-# A real room inside the building is still a room, and is shown without
-# whatever the portal decorated it with.
+# A real room inside the building is still a room.
 ev = an._normalize(
-    {**row, "location": {"label": "*Rink 2"}}, STARRED, dt.date(2026, 9, 11)
+    {**row, "location": {"label": "Aquatic Centre Pool"}}, WV_CENTRE, dt.date(2026, 9, 11)
 )
-check("a real room survives, undecorated", ev.facility, "Rink 2")
+check("a real room survives", ev.facility, "Aquatic Centre Pool")
 
-# Categories arrive HTML-escaped from some portals and plain from others.
-# Matching the escaped form would drop every Vancouver fitness session to
-# the "Other" chip.
-ev = an._normalize(
-    {**row, "name": "Open Gym", "category": "Drop-in - Sport"},
-    POCO_SOURCE,
-    dt.date(2026, 9, 11),
-)
-check("a mapped category still types the event", ev.activity_type, "Sports")
 # Some portals escape the ampersand in a category name and some don't, so
-# the lookup unescapes first. No configured city currently sends a category
-# containing one, which is exactly why this is pinned here rather than left
-# to be rediscovered the next time one does.
+# the lookup unescapes first. No configured city currently sends one, which
+# is why this is pinned rather than left to be rediscovered.
 an.CATEGORY_ACTIVITY_TYPES["Fitness & Health"] = "Fitness"
 try:
     for written in ["Fitness &amp; Health", "Fitness & Health"]:
         ev = an._normalize(
             {**row, "name": "Open Session", "category": written},
-            {**POCO_SOURCE, "activity_type": "Other"},
+            {**SOURCE, "activity_type": "Other"},
             dt.date(2026, 9, 11),
         )
         check(f"{written!r} maps the same", ev.activity_type, "Fitness")
@@ -628,84 +703,10 @@ finally:
     del an.CATEGORY_ACTIVITY_TYPES["Fitness & Health"]
 
 
-print("\n19. A DROP-IN IS TOLD FROM A COURSE BY THE SHAPE OF THE ROW")
-# Vancouver publishes no drop-in flag: no types, no category on the row,
-# and allow_drop_in_reg is False even on other cities' plainest drop-ins.
-# What it does do is list a drop-in once per session with no end date, and
-# a registered course once for its whole term. These are real rows.
-for name, start, end, want in [
-    ("Badminton", "2026-09-14", "", True),
-    ("Basketball - Full Court", "2026-09-15", "", True),
-    ("Group Fitness: Core and More", "2026-09-14", "2026-09-14", True),
-    ("Ageless Training - Set One", "2026-09-08", "2026-10-27", False),
-    ("Journey Basketball Grassroots", "2026-09-08", "2026-11-24", False),
-    ("Archery- Beginner", "2026-09-12", "2026-10-24", False),
-    ("Gymnathlon - BABY Group", "2026-09-19", "2026-10-31", False),
-    # The exception the name rule exists for: a genuine drop-in that runs
-    # all term and says so in its title.
-    ("Friday Youth Badminton Drop-In", "2026-09-04", "2026-12-18", True),
-    ("Drop-In: Youth Lounge", "2026-09-08", "2026-12-15", True),
-]:
-    got = an.is_drop_in(
-        {"name": name, "date_range_start": start, "date_range_end": end}
-    )
-    check(f"{name!r} ({start}..{end or '·'})", got, want)
-
-# The filter is opt-in. Every other city is narrowed by the portal itself —
-# by category or by type — and applying a name-and-shape guess on top would
-# silently drop their term-long drop-ins for no gain.
-check(
-    "only Vancouver filters drop-ins client-side",
-    sorted({s["source_name"] for s in config.SOURCES if s.get("drop_ins_only")}),
-    ["City of Vancouver"],
-)
-check(
-    "and every Vancouver source does",
-    [
-        s["location"]
-        for s in config.SOURCES
-        if s["source_name"] == "City of Vancouver" and not s.get("drop_ins_only")
-    ],
-    [],
-)
-
-
-# Where the name says nothing, the building does. A rink only does ice.
-for location, want in [
-    ("Britannia Rink", "Skating"),
-    ("Kerrisdale Cyclone Taylor Arena", "Skating"),
-    ("Hillcrest Aquatic Centre", "Swimming"),
-    ("Killarney Pool", "Swimming"),
-    ("Trout Lake Community Centre", "Other"),
-]:
-    check(f"{location!r} falls back to", config._vancouver_venue_type(location), want)
-
-# The point of that: Vancouver's rinks publish ice hockey, and there is
-# deliberately no hockey rule in the classifier because every gym in this
-# app plays floor hockey. The building settles it without one.
-# category is cleared because Vancouver sends none — that absence is the
-# whole reason the building has to answer instead.
-rink = next(s for s in config.SOURCES if s.get("location") == "Britannia Rink")
-ev = an._normalize(
-    {**row, "name": "30 + Drop In Hockey (Players Only)", "category": ""},
-    rink,
-    dt.date(2026, 9, 11),
-)
-check("ice hockey at a rink is skating", ev.activity_type, "Skating")
-gym = next(
-    s for s in config.SOURCES if s.get("location") == "Trout Lake Community Centre"
-)
-ev = an._normalize(
-    {**row, "name": "High 5 Sports - Floor Hockey", "category": ""},
-    gym,
-    dt.date(2026, 9, 11),
-)
-check("floor hockey in a gym is not", ev.activity_type, "Other")
-
-
-print("\n20. THE NEW CITIES ARE TYPED BY NAME, BECAUSE NOTHING ELSE CAN")
-# Vancouver and West Vancouver send no category at all, so every one of
-# their sessions would land on the "Other" chip without these.
+print("\n22. THE NEW CITIES ARE TYPED BY NAME, BECAUSE NOTHING ELSE CAN")
+# Vancouver and West Vancouver name categories in their filters endpoint
+# and then send none on the rows, so every one of their sessions would land
+# on the "Other" chip without these.
 for name, want in [
     ("Cycle Fit", "Fitness"),
     ("Cycle Xpress", "Fitness"),
@@ -713,6 +714,8 @@ for name, want in [
     ("Bootcamp for Older Adults", "Fitness"),
     ("Body Balance - Core and More", "Fitness"),
     ("Lane Swim", "Swimming"),
+    ("Length Swim", "Swimming"),
+    ("Public Swim", "Swimming"),
     ("Aquafit", "Swimming"),
     ("Public Skate", "Skating"),
     ("Stick and Puck", "Skating"),

@@ -82,5 +82,46 @@ def fetch_all_events(sources: list[dict], days_ahead: int) -> tuple[list[Event],
                 logger.exception("Failed to fetch %s", label)
                 errors.append(f"{label}: temporarily unavailable")
 
+    all_events = _without_duplicates(all_events)
     all_events.sort(key=lambda e: (e.date, e.start_time))
     return all_events, errors
+
+
+def _occurrence_identity(event: Event) -> tuple:
+    """What makes two rows the same session rather than two sessions.
+
+    The portal's own id for the activity is in the key, so two genuinely
+    different activities that happen to share a name, venue and start time
+    — two courts running the same drop-in at once, say — are still counted
+    separately. Only the same activity arriving twice collapses.
+    """
+    return (
+        event.source_name,
+        event.course_id,
+        event.event_name,
+        event.location,
+        event.facility,
+        event.date,
+        event.start_time,
+        event.end_time,
+    )
+
+
+def _without_duplicates(events: list[Event]) -> list[Event]:
+    """Drop sessions already returned by an earlier source.
+
+    Sources are allowed to overlap. A city whose drop-ins can only be found
+    by searching for them needs several searches, and a session whose name
+    answers two of them — "Open Gym Drop-In" matches both "Open Gym" and
+    "Drop-in" — would otherwise be listed twice, which reads as a bug and
+    would make it watchable twice over.
+    """
+    seen = set()
+    unique = []
+    for event in events:
+        identity = _occurrence_identity(event)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        unique.append(event)
+    return unique

@@ -1565,7 +1565,11 @@ footer a { color: var(--text-muted); }
   font-size: 1.15rem;
 }
 
-@media (max-width: 640px) {
+/* 560px, like every other breakpoint in this file. This block was written
+   at 640px, which left a band of widths where the welcome card had already
+   switched to its phone sizing while the page behind it was still on the
+   desktop layout. */
+@media (max-width: 560px) {
   .welcome-list li {
     font-size: 0.84rem;
     gap: 0.65rem;

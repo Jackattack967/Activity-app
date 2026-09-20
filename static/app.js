@@ -762,8 +762,15 @@
       "Port Moody": "#0f766e",
       "New Westminster": "#7c3aed",
       Burnaby: "#be185d",
-      "West Vancouver": "#166534",
+      // Gold: the only one of the remaining hues not already close to a
+      // neighbour's. Vancouver borders Burnaby, so it has to stand apart
+      // from that rose above all, and green would be read as "has open
+      // spots", which is what the marker fill already means.
       Vancouver: "#a16207",
+      // Indigo for the same reasons. West Vancouver's only neighbour here
+      // is Vancouver, so gold is the one it must not be mistaken for, and
+      // the green this started as fell to the rule above it.
+      "West Vancouver": "#4338ca",
     };
     const AREA_FALLBACK_COLOR = "#64748b";
 

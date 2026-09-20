@@ -5,11 +5,10 @@ fitness, golf) from municipal recreation portals and shows them in one
 unified, filterable dashboard.
 
 Currently configured for **Vancouver**, **Coquitlam**, **Port Coquitlam**,
-**Port Moody**, **New Westminster**, **Burnaby** and **West Vancouver** — 74
-sources across 78 known venues, and around 2,000 sessions over a 14-day
-window, measured by `check_sources.py` against the live portals. See [`config.py`](config.py) for how to add a calendar
-or a city, and run [`check_sources.py`](check_sources.py) to see what a city
-is actually returning.
+**Port Moody**, **New Westminster**, **Burnaby** and **West Vancouver**. See
+[`config.py`](config.py) for how to add a calendar or a city, and run
+[`check_sources.py`](check_sources.py) to see what a city is actually
+returning.
 
 Cities don't all run the same booking software, so the scraper is split by
 platform: [`scraper.py`](scraper.py) picks a module per source, and
@@ -144,19 +143,45 @@ Richmond also keeps an ActiveNet tenant (`cityofrichmond`) alongside its
 PerfectMind one; its own website links to PerfectMind, so that's the one to
 read.
 
-Vancouver publishes no activity "types", so unlike West Vancouver there is
-no drop-in axis to filter on — only four broad categories that carry
-registered courses alongside drop-ins, and nothing on a row marks which is
-which. The split is made from the shape of what it publishes instead: a
-drop-in is one row per session with no end date, a course is one row
-spanning its term. `scraper_activenet.is_drop_in` explains what that costs.
+Not every neighbour is reachable. Metro Vancouver PerfectMind tenants exist
+for Coquitlam, Port Moody, New Westminster, Maple Ridge, Delta, White Rock,
+Surrey and North Vancouver (NVRC). Port Coquitlam, Burnaby and Vancouver are
+on ActiveNet. Richmond is on neither.
 
-Several Vancouver pools and rinks return nothing, and that is correct.
-Britannia Pool, Hillcrest Aquatic Centre, Killarney Pool and Killarney Rink
-publish only lesson programs here — "Swimming - Parent and Tot 1",
-"Skating - Child Level 3" — with no lane swim or public skate among them.
-Vancouver's public swim and skate schedules are not in this API. The rest of
-the empty ones are outdoor summer pools.
+### Two cities, two ways of asking for a drop-in
+
+West Vancouver tags its activities with a "Daily Activities and
+Drop-Ins" type, so its sources set `type_ids` and the portal does the
+filtering. That is the best case: a category the city invents next month
+is included automatically rather than missed by a hand-written list.
+
+Vancouver has no such axis, which is why it is configured by search.
+
+Vancouver is the one city whose entries in `config.py` are name searches
+rather than one-per-building, and it is worth knowing why before copying
+the pattern.
+
+It publishes about **6,900 activities a fortnight**, almost all of them
+registered courses — swim lessons, skating levels, art classes. Its drop-ins
+are in there, but the portal offers no "drop-in" filter to ask for, so
+pulling the Aquatics, Skating and Sports categories whole would mean
+fetching roughly 120 pages of lesson listings to find a few dozen drop-ins.
+Each Vancouver source therefore sets a `keyword`, which ActiveNet applies
+server-side, and that costs a handful of pages each.
+
+Three things follow from it:
+
+- **Searches overlap.** "Open Gym Drop-In" answers both the `Open Gym` and
+  the `Drop-in` searches. `scraper.py` drops an occurrence a previous source
+  already returned, keyed on the portal's own activity id so two genuinely
+  different sessions that merely look alike are still kept apart.
+- **A search can overshoot.** Looking for `Length Swim` also finds the block
+  where the lanes go to lessons and the swim club, which is the opposite of
+  a drop-in, so a source may set an `exclude` pattern.
+- **The venue comes from the row.** A search that is not pinned to one
+  building returns rows from all of them, so each row names its own venue
+  rather than config naming it. Vancouver prefixes those with an asterisk
+  and wraps drop-in titles in pipes (`|Public Skate|`); both are stripped.
 
 Burnaby is configured for golf only, which is the one activity no other
 city here publishes. Its pools, rinks and gyms are on the same ActiveNet

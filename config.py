@@ -6,11 +6,14 @@
 #
 #   "perfectmind" — Coquitlam, Port Moody, New Westminster. Keys: base_url,
 #       org_path, widget_id, calendar_id. One entry per calendar.
-#   "activenet"   — Port Coquitlam, Burnaby, West Vancouver. Keys: base_url,
-#       org_path, center_id, location, and one or both of category_ids and
-#       type_ids. One entry per *building*, because ActiveNet searches are
-#       filtered by building rather than by calendar. See
-#       scraper_activenet.py for why the building name is configured here.
+#   "activenet"   — Port Coquitlam, Burnaby, Vancouver, West Vancouver.
+#       Keys: base_url, org_path, and then either a building (center_id +
+#       location, one entry per building) or a name search (keyword, with
+#       an optional "exclude" pattern). A search is the fallback for a
+#       portal whose drop-ins are buried in a much larger course
+#       catalogue — see the Vancouver entries. With no "location" the
+#       venue is read from each row instead of configured.
+#       Narrow with category_ids, type_ids, or neither — see below.
 #
 # A source with no "platform" is treated as PerfectMind, which is what every
 # source was before the second platform existed.
@@ -56,23 +59,6 @@
 # defaults to America/Vancouver if omitted — it's used to compute "today" for
 # the schedule's date range in the venue's own local time, not the scraping
 # server's. Only add it explicitly for a source outside that timezone.
-
-def _vancouver_venue_type(location: str) -> str:
-    """What a Vancouver building does, when the session name doesn't say.
-
-    Vancouver names its buildings for what is in them, and the pools and
-    rinks are listed separately from the community centres they adjoin —
-    Britannia is a centre, a pool and a rink. That makes the building a
-    reliable fallback where the event name isn't: a session at a rink is on
-    ice whatever it is called.
-    """
-    lowered = location.casefold()
-    if "pool" in lowered or "aquatic" in lowered:
-        return "Swimming"
-    if "rink" in lowered or "arena" in lowered:
-        return "Skating"
-    return "Other"
-
 
 SOURCES = [
     {
@@ -333,109 +319,46 @@ SOURCES = [
             ("29", "West Vancouver Youth Hub", ("Youth Hub",)),
         )
     ),
-    # City of Vancouver (Park Board), on ActiveNet. Forty-six buildings —
-    # more venues than every other city here put together.
+    # City of Vancouver, on ActiveNet, but configured by *search* rather
+    # than by building — the only city here that needs it.
     #
-    # Unlike West Vancouver, Vancouver publishes no activity "types", so
-    # there is no drop-in axis to filter on: its filters endpoint returns
-    # an empty types list even on a warmed session. All that is left to
-    # narrow by is the four categories below, which are broad enough to
-    # carry registered courses as well as drop-ins.
+    # Vancouver publishes about 6,900 activities in a fortnight and almost
+    # all of them are registered courses: swim lessons, skating levels, art
+    # classes. Its drop-ins are in there too, but the portal offers no
+    # "drop-in" filter to ask for them, and pulling the Aquatics, Skating
+    # and Sports categories whole would mean fetching roughly 120 pages of
+    # lesson listings to find a few dozen drop-ins. So each entry below is
+    # a name search instead, which is a handful of pages each.
     #
-    # check_sources.py answered what that leaves behind: 6,240 sessions,
-    # full of tennis lessons, bellydance levels and basketball leagues. The
-    # narrowing is therefore done here, on the shape of each row, which is
-    # the one thing Vancouver's own data does say — see
-    # scraper_activenet.is_drop_in.
+    # Searches are allowed to overlap; scraper.py drops an occurrence that
+    # two of them both return. "Open Gym Drop-In" answers two of these.
     #
-    # The pools and rinks are separate buildings from the community centres
-    # they sit beside (Britannia is a centre, a pool and a rink), which is
-    # how the portal lists them and how they map.
-    #
-    # Several of them return nothing, and that is correct rather than
-    # broken. Some are outdoor and summer-only. The rest — Britannia Pool,
-    # Hillcrest Aquatic Centre, Killarney Pool, Killarney Rink — publish
-    # nothing here but lesson programs: "Swimming - Parent and Tot 1",
-    # "Skating - Child Level 3", every row, with no lane swim or public
-    # skate among them. Vancouver's public swim and skate schedules are not
-    # in this API at all. They are kept configured anyway, at the cost of
-    # one request each, so that anything they do start publishing arrives
-    # without a code change.
-    #
-    # Left out: "Vancouver Park Board Recreation Services", which is the
-    # administrative catch-all rather than a building, so it has no address
-    # and nothing to put on a map.
+    # No "location" key, deliberately: a search that is not pinned to one
+    # building gets rows from all of them, so each row names its own venue.
     *(
         {
             "source_name": "City of Vancouver",
             "platform": "activenet",
             "base_url": "https://anc.ca.apm.activecommunities.com",
             "org_path": "vancouver",
-            "center_id": center_id,
-            "location": location,
-            # Aquatics, Skating, Sports, Fitness & Health.
-            "category_ids": ["23", "24", "27", "28"],
-            # Vancouver's categories carry registered courses alongside
-            # drop-ins and it publishes no drop-in flag of any kind, so the
-            # split is made from the shape of each row instead — see
-            # scraper_activenet.is_drop_in, which explains what that costs.
-            "drop_ins_only": True,
-            "calendar_label": f"Drop-in — {location}",
-            # Vancouver sends no category, so the type comes from the event
-            # name — and where the name doesn't say, the building does. A
-            # rink only does ice and a pool only does water, so "30 + Drop
-            # In Hockey" at Britannia Rink is skating without needing a
-            # hockey rule that would misfile the floor hockey played in
-            # every gym in this app.
-            "activity_type": _vancouver_venue_type(location),
+            "keyword": keyword,
+            "category_ids": category_ids,
+            "exclude": exclude,
+            "calendar_label": f"Drop-in — {keyword}",
+            "activity_type": activity_type,
         }
-        for center_id, location in (
-            ("38", "Britannia Community Centre"),
-            ("37", "Britannia Pool"),
-            ("24", "Britannia Rink"),
-            ("57", "Champlain Heights Community Centre"),
-            ("6", "Coal Harbour Community Centre"),
-            ("29", "Creekside Community Recreation Centre"),
-            ("48", "Douglas Park Community Centre"),
-            ("50", "Dunbar Community Centre"),
-            ("43", "False Creek Community Centre"),
-            ("44", "Hastings Community Centre"),
-            ("59", "Hillcrest Aquatic Centre"),
-            ("39", "Hillcrest Community Centre"),
-            ("22", "Hillcrest Rink"),
-            ("55", "Kensington Community Centre"),
-            ("56", "Kensington Pool"),
-            ("33", "Kerrisdale Community Centre"),
-            ("23", "Kerrisdale Cyclone Taylor Arena"),
-            ("34", "Kerrisdale Pool"),
-            ("35", "Killarney Community Centre"),
-            ("36", "Killarney Pool"),
-            ("25", "Killarney Rink"),
-            ("40", "Kitsilano Community Centre"),
-            ("3", "Kitsilano Pool"),
-            ("26", "Kitsilano Rink"),
-            ("10", "Lord Byng Pool"),
-            ("275", "Maple Grove Park Pool"),
-            ("54", "Marpole-Oakridge Community Centre"),
-            ("288", "Moberly Arts and Cultural Centre"),
-            ("53", "Mount Pleasant Community Centre"),
-            ("5", "New Brighton Pool"),
-            ("60", "RayCam Co-operative Centre"),
-            ("46", "Renfrew Park Community Centre"),
-            ("47", "Renfrew Park Pool"),
-            ("42", "Roundhouse Community Arts and Recreation Centre"),
-            ("51", "Strathcona Community Centre"),
-            ("41", "Sunset Community Centre"),
-            ("27", "Sunset Rink"),
-            ("45", "Templeton Park Pool"),
-            ("58", "Thunderbird Community Centre"),
-            ("32", "Trout Lake Community Centre"),
-            ("28", "Trout Lake Rink"),
-            ("2", "Vancouver Aquatic Centre"),
-            ("7", "West End Community Centre"),
-            ("9", "West End Rink"),
-            ("49", "West Point Grey Community Centre - Aberthau"),
-            ("67", "West Point Grey Community Centre - Jericho Hill"),
+        for keyword, category_ids, activity_type, exclude in (
+            ("Public Skate", ["24"], "Skating", None),
+            # No category filter on the swims: Vancouver files some of them
+            # outside Aquatics, and narrowing to that category returned
+            # nothing at all.
+            ("Public Swim", [], "Swimming", None),
+            # "Length Swim" also matches the block where the lanes are
+            # handed to lessons and the swim club, which is the opposite of
+            # a drop-in.
+            ("Length Swim", [], "Swimming", r"lesson|swim club"),
+            ("Drop-in", ["27"], "Sports", None),
+            ("Open Gym", ["27"], "Sports", None),
         )
     ),
 ]
@@ -508,6 +431,9 @@ FACILITY_COORDS = {
     "Moody Park Arena": (49.215617, -122.926213),
     "təməsew̓txʷ Aquatic and Community Centre": (49.221138, -122.907594),
     "Queen's Park Sportsplex": (49.213589, -122.903744),
+    # Appears only in the ice season, so it was missing until skating
+    # returned to New Westminster's schedule.
+    "Queen's Park Arena": (49.214878, -122.905853),
     "Queensborough Community Centre": (49.185876, -122.943506),
     # Street-level only; Century House is mid-block on Eighth Street.
     "Century House": (49.201950, -122.912396),
@@ -518,6 +444,48 @@ FACILITY_COORDS = {
     # a ~400 m difference, which is the width of the course.
     "Burnaby Mountain Golf Course": (49.264966, -122.942888),
     "Riverway Golf Course": (49.200628, -122.990303),
+    # City of Vancouver
+    # Geocoded once from OpenStreetMap and pinned here, like the rest.
+    # Vancouver abbreviates "Community Centre" to "Cmty Centre" in its
+    # portal, and these keys must match what the portal sends.
+    "Britannia Cmty Centre": (49.275064, -123.070369),
+    # Inside the Britannia complex; OSM has the site, not the pool.
+    "Britannia Pool": (49.275064, -123.070369),
+    "Britannia Rink": (49.276053, -123.070612),
+    "Champlain Heights Cmty Centre": (49.214722, -123.031898),
+    "Coal Harbour Cmty Centre": (49.290415, -123.125114),
+    "Douglas Park Cmty Centre": (49.252205, -123.122463),
+    "Dunbar Cmty Centre": (49.243717, -123.186028),
+    "False Creek Cmty Centre": (49.269444, -123.134088),
+    "Hastings Cmty Centre": (49.280623, -123.039427),
+    "Hillcrest Aquatic Centre": (49.243813, -123.107061),
+    "Hillcrest Cmty Centre": (49.243738, -123.107859),
+    "Hillcrest Rink": (49.244196, -123.107837),
+    "Kensington Cmty Centre": (49.237313, -123.074928),
+    "Kerrisdale Cmty Centre": (49.233140, -123.156936),
+    "Kerrisdale Cyclone Taylor Arena": (49.235290, -123.154027),
+    "Killarney Cmty Centre": (49.226921, -123.043439),
+    "Killarney Pool": (49.227212, -123.044156),
+    "Killarney Rink": (49.226726, -123.043453),
+    "Kitsilano Cmty Centre": (49.261525, -123.162090),
+    "Kitsilano Rink": (49.262370, -123.161986),
+    "Lord Byng Pool": (49.259503, -123.192778),
+    "Marpole-Oakridge Cmty Centre": (49.214859, -123.129049),
+    "Mount Pleasant Cmty Centre": (49.264141, -123.100050),
+    "Renfrew Park Cmty Centre": (49.251235, -123.042921),
+    # Shares its building with the community centre above.
+    "Renfrew Park Pool": (49.251235, -123.042921),
+    "Roundhouse Cmty Arts and Rec Centre": (49.273401, -123.121939),
+    "Strathcona Cmty Centre": (49.279644, -123.091713),
+    "Sunset Cmty Centre": (49.222835, -123.101171),
+    "Sunset Rink": (49.223226, -123.098210),
+    "Templeton Park Pool": (49.278296, -123.058986),
+    "Thunderbird Cmty Centre": (49.263999, -123.031292),
+    "Trout Lake Cmty Centre": (49.254863, -123.065207),
+    # OSM point is the complex's fitness centre, same building.
+    "Trout Lake Rink": (49.255288, -123.065129),
+    "West End Cmty Centre": (49.290204, -123.136251),
+    "West End Rink": (49.290159, -123.135966),
     # Outdoor pools, mapped to their park's centre rather than the pool
     # itself — OSM has the park but not the pool building.
     "Hume Park": (49.235173, -122.890505),
@@ -546,53 +514,6 @@ VENUES_AWAITING_COORDS = frozenset(
         "Gleneagles Golf Course",
         "West Vancouver Seniors' Activity Centre",
         "West Vancouver Youth Hub",
-        # City of Vancouver
-        "Britannia Community Centre",
-        "Britannia Pool",
-        "Britannia Rink",
-        "Champlain Heights Community Centre",
-        "Coal Harbour Community Centre",
-        "Creekside Community Recreation Centre",
-        "Douglas Park Community Centre",
-        "Dunbar Community Centre",
-        "False Creek Community Centre",
-        "Hastings Community Centre",
-        "Hillcrest Aquatic Centre",
-        "Hillcrest Community Centre",
-        "Hillcrest Rink",
-        "Kensington Community Centre",
-        "Kensington Pool",
-        "Kerrisdale Community Centre",
-        "Kerrisdale Cyclone Taylor Arena",
-        "Kerrisdale Pool",
-        "Killarney Community Centre",
-        "Killarney Pool",
-        "Killarney Rink",
-        "Kitsilano Community Centre",
-        "Kitsilano Pool",
-        "Kitsilano Rink",
-        "Lord Byng Pool",
-        "Maple Grove Park Pool",
-        "Marpole-Oakridge Community Centre",
-        "Moberly Arts and Cultural Centre",
-        "Mount Pleasant Community Centre",
-        "New Brighton Pool",
-        "RayCam Co-operative Centre",
-        "Renfrew Park Community Centre",
-        "Renfrew Park Pool",
-        "Roundhouse Community Arts and Recreation Centre",
-        "Strathcona Community Centre",
-        "Sunset Community Centre",
-        "Sunset Rink",
-        "Templeton Park Pool",
-        "Thunderbird Community Centre",
-        "Trout Lake Community Centre",
-        "Trout Lake Rink",
-        "Vancouver Aquatic Centre",
-        "West End Community Centre",
-        "West End Rink",
-        "West Point Grey Community Centre - Aberthau",
-        "West Point Grey Community Centre - Jericho Hill",
     }
 )
 
@@ -612,8 +533,8 @@ AREAS = (
     {"name": "Port Moody", "cities": ("City of Port Moody",)},
     {"name": "New Westminster", "cities": ("City of New Westminster",)},
     {"name": "Burnaby", "cities": ("City of Burnaby",)},
-    {"name": "West Vancouver", "cities": ("District of West Vancouver",)},
     {"name": "Vancouver", "cities": ("City of Vancouver",)},
+    {"name": "West Vancouver", "cities": ("District of West Vancouver",)},
 )
 
 # Built once at import: {source_name -> area name}, so annotating an event
