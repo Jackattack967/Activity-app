@@ -216,6 +216,25 @@ def main() -> int:
         if len(empty) > args.sample:
             print(f"  ... and {len(empty) - args.sample} more")
 
+    # Venues learned by scraping can't be checked the way configured ones
+    # are: a PerfectMind source never names its building, so a venue that
+    # is missing from FACILITY_COORDS — or spelled a hair differently from
+    # the key there — costs a map pin and says nothing about it. This is
+    # the only place that difference becomes visible.
+    venues = {e.location for e in events if e.location}
+    unmapped = sorted(venues - set(config.FACILITY_COORDS))
+    if unmapped:
+        print(
+            f"\n{len(unmapped)} of {len(venues)} venue(s) have no map pin. Either the"
+            "\nvenue is new, or its name here differs from the key in"
+            "\nFACILITY_COORDS — which looks identical on the map, and isn't:"
+        )
+        for venue in unmapped:
+            declared = " (declared in VENUES_AWAITING_COORDS)" * (
+                venue in config.VENUES_AWAITING_COORDS
+            )
+            print(f"  · {venue}{declared}")
+
     by_type = collections.Counter(e.activity_type for e in events)
     if by_type:
         print("\nActivity types:")

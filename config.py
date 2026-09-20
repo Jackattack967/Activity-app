@@ -518,6 +518,20 @@ FACILITY_COORDS = {
     "Hyde Creek Recreation Centre": (49.274791, -122.763090),
     # The youth centre sits inside Leigh Square Community Arts Village.
     "Outlet": (49.261973, -122.780310),
+    # North Vancouver Recreation & Culture
+    # Each of these matched its own name in OpenStreetMap, in the right
+    # municipality — the standard the two West Vancouver holdouts below
+    # could not meet.
+    "Karen Magnussen Community Recreation Centre": (49.330594, -123.045920),
+    "Harry Jerome Community Recreation Centre": (49.331010, -123.070851),
+    "Ron Andrews Community Recreation Centre": (49.314197, -123.000898),
+    "Delbrook Community Recreation Centre": (49.336054, -123.092038),
+    "Parkgate Community Centre": (49.318080, -122.970497),
+    "Lions Gate Community Recreation Centre": (49.326476, -123.121378),
+    "John Braithwaite Community Centre": (49.312434, -123.080647),
+    # City of Richmond
+    "Richmond Ice Centre": (49.136387, -123.066688),
+    "Minoru Arenas": (49.164468, -123.142951),
     # City of New Westminster
     "Moody Park Arena": (49.215617, -122.926213),
     "təməsew̓txʷ Aquatic and Community Centre": (49.221138, -122.907594),
@@ -609,12 +623,13 @@ FACILITY_COORDS = {
 # the top of the menu into FACILITY_COORDS, and delete the name from here.
 VENUES_AWAITING_COORDS = frozenset(
     {
-        # District of West Vancouver. The rest are mapped; these two are
-        # not in OpenStreetMap under any name tried, and the searches that
-        # did return something returned the wrong building — Vancouver's
-        # West End aquatic centre for the first, and merely the address fed
-        # to it for the second. A wrong pin is worse than no pin, so they
-        # wait for someone with a map.
+        # District of West Vancouver. Neither is in OpenStreetMap under any
+        # name tried. Both eventually returned *something* — but only by
+        # being handed a street address guessed from memory, and what came
+        # back was a stretch of Marine Drive for the first and an apartment
+        # block called Esquimalt Towers for the second. Every coordinate
+        # above matched its own venue by name; these did not, and a pin on
+        # the wrong building is worse than no pin at all.
         "West Vancouver Aquatic Centre",
         "West Vancouver Youth Hub",
     }
