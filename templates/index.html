@@ -117,56 +117,14 @@
 </div>
 {% endif %}
 
-<div class="filters">
-  <div class="filter-group" id="activity-filters">
-    <button class="chip active" data-activity="all" type="button">All activities</button>
-    {% for a in activity_types %}
-    <button class="chip" data-activity="{{ a }}" type="button">{{ a }}</button>
-    {% endfor %}
-  </div>
-
-  {# The controls and the view toggle share one row. They used to stack,
-     which spent a whole row of the first screen on two buttons. #}
-  <div class="filter-row">
-  <div class="filter-group filter-group-controls">
-    <select id="area-filter" aria-label="Area">
-      <option value="">All areas</option>
-      {% for area in areas %}
-      <option value="{{ area }}">{{ area }}</option>
-      {% endfor %}
-    </select>
-    <select id="location-filter">
-      <option value="">All locations</option>
-      {% for loc in locations %}
-      <option value="{{ loc }}">{{ loc }}</option>
-      {% endfor %}
-    </select>
-    <input id="keyword-filter" type="search" placeholder="Search by activity name…">
-    <label class="open-only-label">
-      <input type="checkbox" id="open-only-filter"> Hide full sessions
-    </label>
-    {% if logged_in %}
-    <label class="open-only-label">
-      <input type="checkbox" id="favorites-only-filter"> ★ Favorites only
-    </label>
-    {% endif %}
-  </div>
-
-  <!-- Two views of the same filtered data, not two pages. -->
-  <div class="view-toggle" id="view-toggle" role="group" aria-label="View">
-    <button type="button" class="view-btn active" data-view="list" aria-pressed="true">List</button>
-    <button type="button" class="view-btn" data-view="map" aria-pressed="false">Map</button>
-  </div>
-  </div>
-</div>
-
 {% if accounts_enabled %}
 {# The one feature people have to be told about: nothing on a schedule
    suggests the page can watch it for you. It used to be a line of grey
    fine print, next to no star at all for signed-out visitors — so the
    only people who could discover watching were the ones already using
-   it. #}
-<div class="star-hint">
+   it. Dismissible now that it sits above a three-pane layout: once you
+   know, it is a permanent band across the top of every visit. #}
+<div class="star-hint" id="star-hint" hidden>
   <p class="star-hint-inner">
     <span class="star-hint-icon" aria-hidden="true">☆</span>
     {% if logged_in %}
@@ -178,31 +136,122 @@
       watch it, and you'll be told the moment a place opens up. Takes a
       Google sign-in.</span>
     {% endif %}
+    <button type="button" id="star-hint-dismiss" class="star-hint-dismiss">Dismiss</button>
   </p>
 </div>
 {% endif %}
 
-<main id="schedule-root">
-  <div class="empty-state" id="empty-state" hidden>
-    <p id="empty-state-text">No activities match your filters.</p>
-    <button id="clear-filters-btn" type="button" class="btn-secondary">Clear all filters</button>
-  </div>
-  <div id="day-groups"></div>
+{# Three panes: what to show, the schedule itself, and the detail of one
+   session. They scroll independently on a desktop, so choosing a filter or
+   reading a description never costs you your place in the list. Below
+   900px they stack back into the single column the phone layout wants. #}
+<div class="app-body">
 
-  <div id="map-view" hidden>
-    <div id="facility-map"></div>
-    <div class="map-footer">
-      <p class="map-note" id="map-note"></p>
-      <div class="map-legend">
-        <span><i class="legend-dot legend-dot-open"></i> Has open spots</span>
-        <span><i class="legend-dot"></i> Currently full</span>
-      </div>
-      <!-- One swatch per area, filled in by app.js since which areas have
-           sessions changes with the filters. -->
-      <div class="map-legend map-legend-areas" id="map-area-legend"></div>
+  <aside class="filter-pane" id="filter-pane" aria-label="Filters">
+    <input id="keyword-filter" type="search" placeholder="Search activities…"
+           aria-label="Search activities">
+
+    <div class="filter-field">
+      <label for="area-filter">Area</label>
+      <select id="area-filter">
+        <option value="">All areas</option>
+        {% for area in areas %}
+        <option value="{{ area }}">{{ area }}</option>
+        {% endfor %}
+      </select>
     </div>
-  </div>
-</main>
+
+    <div class="filter-field">
+      <label for="location-filter">Venue</label>
+      <select id="location-filter">
+        <option value="">All locations</option>
+        {% for loc in locations %}
+        <option value="{{ loc }}">{{ loc }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    {# A vertical list rather than the old chip row, so each type can carry
+       the number of sessions behind it — the answer to "is it even worth
+       filtering to golf?" without having to try it. On a phone this same
+       markup goes back to being one swipeable row; see style.css. #}
+    <div class="filter-field filter-field-activity">
+      <span class="filter-label" id="activity-filter-label">Activity</span>
+      <div class="activity-list" id="activity-filters" role="group"
+           aria-labelledby="activity-filter-label">
+        <button class="chip active" data-activity="all" type="button">
+          <span class="chip-label">All activities</span><span class="chip-count"></span>
+        </button>
+        {% for a in activity_types %}
+        <button class="chip" data-activity="{{ a }}" type="button">
+          <span class="chip-label">{{ a }}</span><span class="chip-count"></span>
+        </button>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="filter-toggles">
+      <label class="open-only-label">
+        <input type="checkbox" id="open-only-filter"> Hide full sessions
+      </label>
+      {% if logged_in %}
+      <label class="open-only-label">
+        <input type="checkbox" id="favorites-only-filter"> ★ Favorites only
+      </label>
+      {% endif %}
+    </div>
+
+    <button id="clear-filters-side-btn" type="button" class="filter-clear">Clear all filters</button>
+  </aside>
+
+  <main id="schedule-root">
+    <div class="results-bar">
+      <span class="result-count" id="result-count" role="status"></span>
+      <!-- Two views of the same filtered data, not two pages. -->
+      <div class="view-toggle" id="view-toggle" role="group" aria-label="View">
+        <button type="button" class="view-btn active" data-view="list" aria-pressed="true">List</button>
+        <button type="button" class="view-btn" data-view="map" aria-pressed="false">Map</button>
+      </div>
+    </div>
+
+    <div class="schedule-scroll" id="schedule-scroll">
+      <div class="empty-state" id="empty-state" hidden>
+        <p id="empty-state-text">No activities match your filters.</p>
+        <button id="clear-filters-btn" type="button" class="btn-secondary">Clear all filters</button>
+      </div>
+      <div id="day-groups"></div>
+
+      <div id="map-view" hidden>
+        <div id="facility-map"></div>
+        <div class="map-footer">
+          <p class="map-note" id="map-note"></p>
+          <div class="map-legend">
+            <span><i class="legend-dot legend-dot-open"></i> Has open spots</span>
+            <span><i class="legend-dot"></i> Currently full</span>
+          </div>
+          <!-- One swatch per area, filled in by app.js since which areas have
+               sessions changes with the filters. -->
+          <div class="map-legend map-legend-areas" id="map-area-legend"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  {# What used to be a <details> inside every card. Collapsed-in-place meant
+     opening one pushed the rest of the day down the page; here the
+     description, price and the activity's other times are read beside the
+     list instead of inside it. On a phone it becomes a sheet over the
+     schedule, since there is no room for a third column. #}
+  <aside class="detail-pane" id="detail-pane" aria-label="Session detail" aria-live="polite">
+    <button type="button" id="detail-close-btn" class="detail-close" aria-label="Close detail">✕</button>
+    <div class="detail-empty" id="detail-empty">
+      <span class="detail-empty-icon" aria-hidden="true">▤</span>
+      <p>Pick a session to see its description, price and other times — without
+        losing your place in the list.</p>
+    </div>
+    <div class="detail-body" id="detail-body" hidden></div>
+  </aside>
+</div>
 
 <div class="modal-overlay" id="preferences-modal" hidden>
   <div class="modal-card" role="dialog" aria-labelledby="preferences-title">

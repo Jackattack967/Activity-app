@@ -72,6 +72,36 @@
     });
   }
 
+  // The watch hint. Shown until it is dismissed, and then never again: once
+  // you know the star is there, a permanent band across the top of every
+  // visit is just a row of the schedule you don't get to see. It is
+  // rendered hidden and unhidden here, so an already-dismissed hint never
+  // flashes up before this runs.
+  const starHint = document.getElementById("star-hint");
+  const starHintDismiss = document.getElementById("star-hint-dismiss");
+  const STAR_HINT_KEY = "activityDashboardStarHintDismissed";
+
+  if (starHint) {
+    let hintDismissed = false;
+    try {
+      hintDismissed = localStorage.getItem(STAR_HINT_KEY) === "1";
+    } catch (err) {
+      /* Private browsing can throw on read; showing it again is harmless. */
+    }
+    starHint.hidden = hintDismissed;
+
+    if (starHintDismiss) {
+      starHintDismiss.addEventListener("click", () => {
+        starHint.hidden = true;
+        try {
+          localStorage.setItem(STAR_HINT_KEY, "1");
+        } catch (err) {
+          /* best-effort: it will just be offered again next visit */
+        }
+      });
+    }
+  }
+
   // Theme. Wired here beside the other escape hatches, before runApp(), so
   // it keeps working even if something later in this file throws: being
   // stuck in a theme you can't read with no way out is exactly the failure
@@ -203,6 +233,7 @@
   function runApp() {
     const dayGroupsEl = document.getElementById("day-groups");
     const emptyStateEl = document.getElementById("empty-state");
+    const resultCountEl = document.getElementById("result-count");
     const lastUpdatedEl = document.getElementById("last-updated");
     const refreshBtn = document.getElementById("refresh-btn");
     const activityFiltersEl = document.getElementById("activity-filters");
@@ -580,9 +611,50 @@
       return btn;
     }
 
+    // The link out to the city's own page. Shared by the card and the detail
+    // pane so the waitlist wording is written once — the two must never
+    // disagree about whether a full session can be joined.
+    function buildRegisterLink(ev, badge) {
+      if (!ev.detail_url) return null;
+      const isWaitlist = !badge.open && ev.has_waitlist;
+      const registerEl = document.createElement("a");
+      registerEl.className = "register-btn" + (isWaitlist ? " waitlist-btn" : "");
+      registerEl.textContent = badge.open
+        ? "Register / Pay ↗"
+        : isWaitlist
+        ? "Join waitlist ↗"
+        : "View details ↗";
+      registerEl.href = ev.detail_url;
+      registerEl.target = "_blank";
+      registerEl.rel = "noopener noreferrer";
+      registerEl.title = isWaitlist
+        ? `This session is full. Opens its official ${ev.source_name} page in a ` +
+          "new tab, where the city runs the waitlist."
+        : `Opens this session's official ${ev.source_name} page in a new tab, ` +
+          "where registration and payment are handled by the city.";
+      return registerEl;
+    }
+
     function buildCard(ev) {
       const card = document.createElement("article");
-      card.className = "event-card" + (ev.cancelled ? " event-card-cancelled" : "");
+      const selected = eventKey(ev) === selectedKey;
+      card.className =
+        "event-card" +
+        (ev.cancelled ? " event-card-cancelled" : "") +
+        (selected ? " event-card-selected" : "");
+
+      // The whole card opens the detail pane. A button role rather than a
+      // link: it changes what the pane beside the list is showing, it does
+      // not navigate anywhere.
+      card.setAttribute("role", "button");
+      card.tabIndex = 0;
+      card.setAttribute("aria-pressed", selected ? "true" : "false");
+      card.addEventListener("click", () => selectEvent(ev));
+      card.addEventListener("keydown", (e) => {
+        if (e.key !== "Enter" && e.key !== " ") return;
+        e.preventDefault();
+        selectEvent(ev);
+      });
 
       const timeCol = document.createElement("div");
       timeCol.className = "event-time";
@@ -632,25 +704,9 @@
       }
       mainCol.appendChild(metaRow);
 
-      // The portal's own description — equipment requirements, age rules,
-      // supervision ratios. Collapsed by default so it doesn't bury the list,
-      // but it answers "can I actually go to this?" without leaving the app.
-      if (ev.details) {
-        const details = document.createElement("details");
-        details.className = "event-details";
-
-        const summary = document.createElement("summary");
-        summary.textContent = "Details";
-        details.appendChild(summary);
-
-        const body = document.createElement("p");
-        body.className = "event-details-body";
-        body.textContent = ev.details;
-        details.appendChild(body);
-
-        mainCol.appendChild(details);
-      }
-
+      // The portal's own description used to be a <details> here. Opening
+      // one pushed the rest of the day down the page, so it now lives in
+      // the detail pane, where reading it costs the list nothing.
       card.appendChild(mainCol);
 
       const statusCol = document.createElement("div");
@@ -664,29 +720,196 @@
       badgeEl.textContent = badge.text;
       statusCol.appendChild(badgeEl);
 
-      if (ev.detail_url) {
-        const isWaitlist = !badge.open && ev.has_waitlist;
-        const registerEl = document.createElement("a");
-        registerEl.className = "register-btn" + (isWaitlist ? " waitlist-btn" : "");
-        registerEl.textContent = badge.open
-          ? "Register / Pay ↗"
-          : isWaitlist
-          ? "Join waitlist ↗"
-          : "View details ↗";
-        registerEl.href = ev.detail_url;
-        registerEl.target = "_blank";
-        registerEl.rel = "noopener noreferrer";
-        registerEl.title = isWaitlist
-          ? `This session is full. Opens its official ${ev.source_name} page in a ` +
-            "new tab, where the city runs the waitlist."
-          : `Opens this session's official ${ev.source_name} page in a new tab, ` +
-            "where registration and payment are handled by the city.";
-        statusCol.appendChild(registerEl);
-      }
+      const registerEl = buildRegisterLink(ev, badge);
+      if (registerEl) statusCol.appendChild(registerEl);
 
       card.appendChild(statusCol);
 
       return card;
+    }
+
+    // --- The detail pane --------------------------------------------------
+    //
+    // One session's full description, read beside the list rather than
+    // inside it. What identifies "the selected session" is a key rather than
+    // the object itself: the events array is replaced wholesale by Refresh,
+    // so holding a reference would quietly select a stale copy.
+
+    const detailPaneEl = document.getElementById("detail-pane");
+    const detailBodyEl = document.getElementById("detail-body");
+    const detailEmptyEl = document.getElementById("detail-empty");
+    const detailCloseBtn = document.getElementById("detail-close-btn");
+
+    // course_id repeats across the dates of a recurring activity, so the
+    // date and start time are part of the identity of one session.
+    function eventKey(ev) {
+      return [ev.source_name, ev.course_id, ev.date, ev.start_time].join("|");
+    }
+
+    let selectedKey = null;
+
+    function selectEvent(ev) {
+      selectedKey = eventKey(ev);
+      render();
+    }
+
+    function clearSelection() {
+      selectedKey = null;
+      render();
+    }
+
+    if (detailCloseBtn) detailCloseBtn.addEventListener("click", clearSelection);
+
+    function fact(key, value) {
+      const row = document.createElement("div");
+      row.className = "detail-fact";
+      const k = document.createElement("span");
+      k.className = "detail-fact-k";
+      k.textContent = key;
+      const v = document.createElement("span");
+      v.className = "detail-fact-v";
+      // textContent throughout: every one of these values comes from a
+      // scraped third-party page.
+      v.textContent = value;
+      row.append(k, v);
+      return row;
+    }
+
+    // Every other session of the same activity that hasn't happened yet —
+    // the answer to "I can't make this one, when else is it on?".
+    function otherTimes(ev, upcoming) {
+      return upcoming
+        .filter((e) => sameActivity(e, ev) && eventKey(e) !== eventKey(ev))
+        .sort((a, b) =>
+          `${a.date} ${a.start_time}`.localeCompare(`${b.date} ${b.start_time}`)
+        )
+        .slice(0, 6);
+    }
+
+    function renderDetail(visible, upcoming) {
+      if (!detailPaneEl) return;
+
+      // A session filtered out of the list is no longer on screen to be
+      // "the selected one", so the pane lets it go rather than describing
+      // something the schedule beside it is not showing.
+      const ev = selectedKey
+        ? visible.find((e) => eventKey(e) === selectedKey) || null
+        : null;
+      if (!ev) selectedKey = null;
+
+      detailPaneEl.classList.toggle("detail-pane-open", !!ev);
+      if (detailEmptyEl) detailEmptyEl.hidden = !!ev;
+      detailBodyEl.hidden = !ev;
+      detailBodyEl.textContent = "";
+      if (!ev) return;
+
+      const badge = badgeInfo(ev);
+
+      const head = document.createElement("div");
+      head.className = "detail-head";
+
+      const heading = document.createElement("div");
+      heading.className = "detail-heading";
+
+      const cat = document.createElement("span");
+      cat.className = "detail-cat";
+      cat.textContent = ev.activity_type || "";
+
+      const title = document.createElement("h2");
+      title.className = "detail-title" + (ev.cancelled ? " detail-title-cancelled" : "");
+      title.textContent = ev.event_name || "Untitled activity";
+
+      heading.append(cat, title);
+      head.appendChild(heading);
+
+      if (accountsEnabled && ev.source_name && ev.course_id) {
+        head.appendChild(buildFavoriteButton(ev));
+      }
+      detailBodyEl.appendChild(head);
+
+      const badgeEl = document.createElement("span");
+      badgeEl.className = "badge " + badge.cls;
+      badgeEl.textContent = badge.text;
+      const badgeRow = document.createElement("div");
+      badgeRow.appendChild(badgeEl);
+      detailBodyEl.appendChild(badgeRow);
+
+      const facts = document.createElement("div");
+      facts.className = "detail-facts";
+      const when = [
+        formatDateHeading(ev.date, ev.day_of_week),
+        ev.start_time && ev.end_time
+          ? `${ev.start_time} – ${ev.end_time}`
+          : ev.start_time || "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      facts.appendChild(fact("When", when));
+      facts.appendChild(fact("Where", ev.facility || ev.location || "—"));
+      if (ev.price) facts.appendChild(fact("Price", ev.price));
+      if (ev.calendar_label) facts.appendChild(fact("Program", ev.calendar_label));
+      if (ev.source_name) facts.appendChild(fact("Source", ev.source_name));
+      detailBodyEl.appendChild(facts);
+
+      if (ev.details) {
+        const desc = document.createElement("p");
+        desc.className = "detail-desc";
+        desc.textContent = ev.details;
+        detailBodyEl.appendChild(desc);
+      }
+
+      const others = otherTimes(ev, upcoming);
+      const othersWrap = document.createElement("div");
+      const othersLabel = document.createElement("span");
+      othersLabel.className = "detail-section-label";
+      othersLabel.textContent = "Other times";
+      othersWrap.appendChild(othersLabel);
+
+      if (others.length === 0) {
+        const none = document.createElement("p");
+        none.className = "detail-none";
+        none.textContent = "This is the only session of this activity still to come.";
+        othersWrap.appendChild(none);
+      } else {
+        const list = document.createElement("div");
+        list.className = "detail-others";
+        for (const other of others) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "detail-other";
+
+          const whenEl = document.createElement("span");
+          whenEl.className = "detail-other-when";
+          whenEl.textContent = [shortDate(other.date), other.start_time]
+            .filter(Boolean)
+            .join(" · ");
+
+          const spotsEl = document.createElement("span");
+          spotsEl.className = "detail-other-spots";
+          spotsEl.textContent = badgeInfo(other).text;
+
+          btn.append(whenEl, spotsEl);
+          btn.addEventListener("click", () => selectEvent(other));
+          list.appendChild(btn);
+        }
+        othersWrap.appendChild(list);
+      }
+      detailBodyEl.appendChild(othersWrap);
+
+      const registerEl = buildRegisterLink(ev, badge);
+      if (registerEl) {
+        registerEl.classList.add("detail-cta");
+        const ctaWrap = document.createElement("div");
+        ctaWrap.appendChild(registerEl);
+
+        const note = document.createElement("p");
+        note.className = "detail-cta-note";
+        note.textContent = badge.open
+          ? "Opens the city's booking system in a new tab. Times and spaces are read from it directly."
+          : "Opens the city's own page in a new tab — star this and you'll hear the moment a place frees up.";
+        ctaWrap.appendChild(note);
+        detailBodyEl.appendChild(ctaWrap);
+      }
     }
 
     // --- Map view ---------------------------------------------------------
@@ -1267,6 +1490,13 @@
 
       renderList(visible);
       renderMap(visible);
+      renderDetail(visible, upcoming);
+      paintActivityCounts(upcoming);
+
+      if (resultCountEl) {
+        resultCountEl.textContent =
+          visible.length === 1 ? "1 session" : `${visible.length} sessions`;
+      }
 
       const renderedAny = visible.length > 0;
       emptyStateEl.hidden = renderedAny;
@@ -1342,7 +1572,31 @@
       keywordFilterEl.value = "";
       openOnlyFilterEl.checked = false;
       if (favoritesOnlyFilterEl) favoritesOnlyFilterEl.checked = false;
+      selectedKey = null;
       render();
+    }
+
+    // How many sessions sit behind each activity type. Counted over
+    // everything still to come rather than over what the other filters
+    // currently allow: the number is here to answer "is it worth filtering
+    // to golf at all?", which a count that collapsed to zero as you
+    // narrowed the area never could.
+    function paintActivityCounts(upcoming) {
+      const counts = new Map();
+      for (const ev of upcoming) {
+        counts.set(ev.activity_type, (counts.get(ev.activity_type) || 0) + 1);
+      }
+      activityFiltersEl.querySelectorAll(".chip").forEach((chip) => {
+        const countEl = chip.querySelector(".chip-count");
+        if (!countEl) return;
+        const type = chip.dataset.activity;
+        const group = activityGroups[type];
+        let n;
+        if (type === "all") n = upcoming.length;
+        else if (group) n = group.reduce((sum, t) => sum + (counts.get(t) || 0), 0);
+        else n = counts.get(type) || 0;
+        countEl.textContent = String(n);
+      });
     }
 
     // activeActivity holds "all", one activity type, or the name of a group
@@ -1388,8 +1642,13 @@
     openOnlyFilterEl.addEventListener("change", render);
     if (favoritesOnlyFilterEl) favoritesOnlyFilterEl.addEventListener("change", render);
 
+    // Two of them: the one in the empty state, offered when filters are why
+    // there is nothing to see, and the one at the foot of the filter pane,
+    // which is reachable whether or not the schedule came up empty.
     const clearFiltersBtn = document.getElementById("clear-filters-btn");
     if (clearFiltersBtn) clearFiltersBtn.addEventListener("click", clearAllFilters);
+    const clearFiltersSideBtn = document.getElementById("clear-filters-side-btn");
+    if (clearFiltersSideBtn) clearFiltersSideBtn.addEventListener("click", clearAllFilters);
 
     refreshBtn.addEventListener("click", async () => {
       refreshBtn.disabled = true;
