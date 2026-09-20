@@ -293,6 +293,14 @@ body {
 .menu-item:hover { background: var(--gray-bg); }
 .menu-item-quiet { color: var(--text-muted); }
 
+/* Log out is a form so it can POST. The panel is a flex column, so the
+   form would otherwise arrive as a flex item carrying a browser default
+   margin and push the entry out of line with the ones above it. */
+.menu-form {
+  margin: 0;
+  display: flex;
+}
+
 /* The alerts button keeps its state colour inside the menu. */
 #alerts-btn.alerts-on { color: var(--green); font-weight: 600; }
 

@@ -75,7 +75,21 @@ def google_callback():
     return redirect(url_for("index"))
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["POST"])
 def logout():
+    """Signing out is a change, so it takes a POST rather than a link.
+
+    As a GET this was reachable by anyone else's page: an
+    <img src="https://this-site/logout"> anywhere on the web would have
+    signed you out here, because the browser attaches your session cookie
+    to that request like any other. Nothing is destroyed when it happens —
+    no account, no data — but being signed out by a page you were merely
+    visiting is a denial of the feature, and the fix costs one form.
+
+    Making it a POST also brings it under the cross-site check in app.py,
+    which by design only guards unsafe methods. So the hole closes from
+    both ends: the method is no longer one any page can trigger, and the
+    request now has to prove it came from this site.
+    """
     logout_user()
     return redirect(url_for("index"))

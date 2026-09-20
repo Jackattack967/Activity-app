@@ -101,7 +101,13 @@
         {% endif %}
 
         {% if accounts_enabled and logged_in %}
-        <a class="menu-item menu-item-quiet" role="menuitem" href="{{ url_for('auth.logout') }}">Log out</a>
+        {# A form, not a link: /logout is POST-only, so that no other
+           site's page can sign you out by pointing an image at it. The
+           form carries role="none" so it stays out of the accessibility
+           tree and the button remains a direct menuitem of this menu. #}
+        <form class="menu-form" method="post" action="{{ url_for('auth.logout') }}" role="none">
+          <button type="submit" class="menu-item menu-item-quiet" role="menuitem">Log out</button>
+        </form>
         {% endif %}
       </div>
     </div>
