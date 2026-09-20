@@ -4,8 +4,10 @@ Scrapes public drop-in activity schedules (skating, swimming, sports,
 fitness, golf) from municipal recreation portals and shows them in one
 unified, filterable dashboard.
 
-Currently configured for **Vancouver**, **Coquitlam**, **Port Coquitlam**,
-**Port Moody**, **New Westminster**, **Burnaby** and **West Vancouver**. See
+Currently configured for **Vancouver**, **North Vancouver**, **West
+Vancouver**, **Richmond**, **Burnaby**, **New Westminster**, **Coquitlam**,
+**Port Coquitlam** and **Port Moody** — around 2,150 sessions over a 14-day
+window, measured against the live portals. See
 [`config.py`](config.py) for how to add a calendar or a city, and run
 [`check_sources.py`](check_sources.py) to see what a city is actually
 returning.
@@ -135,13 +137,19 @@ so most neighbours are reachable with config alone:
 | Coquitlam, Port Moody, New Westminster | PerfectMind | configured |
 | Port Coquitlam, Burnaby | ActiveNet | configured |
 | Vancouver (Park Board), West Vancouver | ActiveNet | configured |
-| Richmond | PerfectMind | `richmondcity.perfectmind.com/23650/Clients` |
-| North Vancouver (NVRC, city + district) | PerfectMind | `nvrc.perfectmind.com/23734/Clients` |
+| Richmond (ice only), North Vancouver (NVRC, city + district) | PerfectMind | configured |
 | Maple Ridge, Delta, White Rock, Surrey | PerfectMind | not yet configured |
 
-Richmond also keeps an ActiveNet tenant (`cityofrichmond`) alongside its
-PerfectMind one; its own website links to PerfectMind, so that's the one to
-read.
+Richmond keeps an ActiveNet tenant (`cityofrichmond`) alongside its
+PerfectMind one, and only ice is configured: its PerfectMind tenant
+publishes nothing else as a drop-in, so its pools and gyms are most likely
+on the ActiveNet side and remain to be added.
+
+NVRC is the awkward one. It publishes eighteen calendars across eight
+widgets, and a calendar renders only under the widget it belongs to — pair
+one with the widget NVRC's own landing pages advertise and you get an error
+page, which looks exactly like a calendar with nothing in it. Four of the
+eighteen carry drop-ins.
 
 Not every neighbour is reachable. Metro Vancouver PerfectMind tenants exist
 for Coquitlam, Port Moody, New Westminster, Maple Ridge, Delta, White Rock,

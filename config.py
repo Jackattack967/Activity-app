@@ -503,6 +503,9 @@ FACILITY_COORDS = {
     # City of Port Moody
     "Port Moody Recreation Complex": (49.283211, -122.831651),
     "Rocky Point Pool": (49.279625, -122.849257),
+    # City hall, the library and Inlet Theatre share this complex; a few
+    # of Port Moody's adult drop-ins are booked into it.
+    "Civic Centre": (49.282412, -122.829964),
     # Port Moody's adult and senior drop-ins run here, not at the complex.
     "Kyle Centre": (49.276125, -122.857062),
     # Port Moody's adult and senior drop-ins run here rather than at the
@@ -523,6 +526,8 @@ FACILITY_COORDS = {
     # municipality — the standard the two West Vancouver holdouts below
     # could not meet.
     "Karen Magnussen Community Recreation Centre": (49.330594, -123.045920),
+    # A private rink NVRC books ice at, not one of its own centres.
+    "Canlan Sports": (49.313628, -123.003270),
     "Harry Jerome Community Recreation Centre": (49.331010, -123.070851),
     "Ron Andrews Community Recreation Centre": (49.314197, -123.000898),
     "Delbrook Community Recreation Centre": (49.336054, -123.092038),
@@ -568,6 +573,10 @@ FACILITY_COORDS = {
     "Hillcrest Rink": (49.244196, -123.107837),
     "Kensington Cmty Centre": (49.237313, -123.074928),
     "Kerrisdale Cmty Centre": (49.233140, -123.156936),
+    # Missing until check_sources.py started naming venues with no pin:
+    # the centre and the arena were both here, the pool never was, and
+    # thirty-five sessions a fortnight were quietly going unmapped.
+    "Kerrisdale Pool": (49.232955, -123.156732),
     "Kerrisdale Cyclone Taylor Arena": (49.235290, -123.154027),
     "Killarney Cmty Centre": (49.226921, -123.043439),
     "Killarney Pool": (49.227212, -123.044156),
@@ -632,6 +641,22 @@ VENUES_AWAITING_COORDS = frozenset(
         # the wrong building is worse than no pin at all.
         "West Vancouver Aquatic Centre",
         "West Vancouver Youth Hub",
+    }
+)
+
+# Venues that reach the app by scraping rather than from config, and have
+# no coordinates. VENUES_AWAITING_COORDS cannot hold these: it is checked
+# against sources that name their building here, and a PerfectMind source
+# names nothing — it learns the venue from whatever the portal says. So
+# this is a note, not an invariant, and check_sources.py is what actually
+# finds them.
+#
+#   Lynn Creek Community Recreation Centre (North Vancouver) — opened
+#   recently enough that OpenStreetMap has no entry for it under any name
+#   tried. 19 sessions a fortnight, no pin.
+_UNMAPPED_SCRAPED_VENUES = frozenset(
+    {
+        "Lynn Creek Community Recreation Centre",
     }
 )
 
