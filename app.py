@@ -11,6 +11,7 @@ import secrets
 import threading
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import load_dotenv
 
@@ -73,6 +74,33 @@ CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "").strip()
 EMAIL_PROVIDER_NAMES = {"brevo": "Brevo", "resend": "Resend"}
 
 app.config["SECRET_KEY"] = os.environ.get("FLASK_SECRET_KEY") or secrets.token_hex(32)
+
+# The session cookie says who you are, and the browser attaches it to every
+# request to this site — whichever page started that request. Left at the
+# defaults, a page on any other site could POST to /api/account/delete while
+# you are signed in here and the browser would authenticate it for them.
+#
+#   HttpOnly  keeps the cookie out of reach of JavaScript, so a script
+#             injected into a page cannot read it and impersonate you
+#             elsewhere. (Flask's default, stated rather than assumed.)
+#   SameSite  tells the browser not to send the cookie on a request another
+#             site started, which is the actual forgery defence. Modern
+#             browsers already behave this way by default, but a default is
+#             not a decision: older browsers and some in-app webviews don't.
+#   Secure    keeps the cookie off plain HTTP, where anyone sharing the
+#             network could read it in transit.
+#
+# Secure is the one that cannot simply be switched on: the development
+# launcher serves plain http://localhost, where a Secure cookie is never
+# sent at all, so sign-in would silently stop working on your own machine.
+# Running this file directly (what the .bat launcher does) is the
+# development path; in production gunicorn imports it as a module instead,
+# so __name__ tells the two apart without needing another setting.
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=__name__ != "__main__",
+)
 
 ACCOUNTS_ENABLED = False
 if missing_env:
@@ -195,6 +223,77 @@ def _is_logged_in() -> bool:
         return current_user.is_authenticated
     except Exception:
         return False
+
+
+# Reading is not a forgery risk: a browser sending your cookie to fetch a
+# page someone linked to is the web working as intended. Only writes need
+# to prove where they came from.
+_SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+# Writes that are deliberately not browser requests, and so have no site of
+# origin to check. What makes each safe to exempt is that none of them is
+# authenticated by the session cookie — each carries its own token, so
+# forging one would mean forging that token:
+#
+#   /api/check-watches, /api/purge-inactive — run by the external scheduler
+#     on a timer, from a server rather than a browser. Both verify
+#     WATCH_CHECK_TOKEN before doing anything.
+#   /unsubscribe — RFC 8058 one-click unsubscribe is POSTed by the
+#     recipient's own mail provider, from their infrastructure, and carries
+#     a signed token naming the user. CASL requires that link to keep
+#     working, so refusing it for coming from somewhere else would trade a
+#     legal obligation for a protection it does not need.
+_ORIGIN_EXEMPT_PATHS = frozenset(
+    {"/api/check-watches", "/api/purge-inactive", "/unsubscribe"}
+)
+
+
+def _origin_of(url: str) -> str:
+    """The scheme://host part of a URL, or "" if it hasn't got one."""
+    parts = urlsplit(url)
+    return f"{parts.scheme}://{parts.netloc}" if parts.scheme and parts.netloc else ""
+
+
+# Registered before _touch_last_seen below, and order matters: Flask runs
+# these in the order they are defined, so a refused request is turned away
+# before it reaches anything that writes to the database.
+@app.before_request
+def _reject_cross_site_writes():
+    """Refuse a state-changing request that did not come from this site.
+
+    The second half of the cookie settings above. SameSite asks the browser
+    not to send the cookie cross-site; this checks server-side that the
+    request really did start here, which still holds on a browser whose
+    cookie rules are older or weaker than we assumed.
+    """
+    if request.method in _SAFE_METHODS:
+        return None
+    if request.path in _ORIGIN_EXEMPT_PATHS:
+        return None
+
+    # Browsers send Origin on every POST. Referer is the fallback for the
+    # occasional client that omits it; something offering neither is not a
+    # browser acting on a signed-in session, and has no business writing.
+    sent = request.headers.get("Origin") or ""
+    if not sent:
+        sent = _origin_of(request.headers.get("Referer") or "")
+
+    # Built from the request's own host, so this keeps working across the
+    # onrender.com address, a custom domain, and localhost without any of
+    # them being written down here. ProxyFix above is what makes it the
+    # real external host rather than Render's internal one.
+    expected = _origin_of(request.host_url)
+    if sent and expected and sent == expected:
+        return None
+
+    logger.warning(
+        "Refused a cross-site %s to %s (origin %r, expected %r)",
+        request.method,
+        request.path,
+        sent or None,
+        expected,
+    )
+    return jsonify({"error": "cross-site request refused"}), 403
 
 
 # How stale the activity clock is allowed to get before a request refreshes
