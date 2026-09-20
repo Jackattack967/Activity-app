@@ -297,6 +297,62 @@ SOURCES = [
             ("34", "Riverway Golf Course"),
         )
     ),
+    # North Vancouver Recreation & Culture, which runs recreation for both
+    # the City and the District of North Vancouver — one portal, both.
+    #
+    # NVRC publishes eighteen calendars across eight widgets, and a
+    # calendar only renders under the widget it belongs to. These four are
+    # the ones carrying drop-ins; the other fourteen are registration
+    # pages for lessons and courses and return nothing here.
+    *(
+        {
+            "source_name": "North Vancouver Recreation & Culture",
+            "base_url": "https://nvrc.perfectmind.com",
+            "org_path": "23734/Clients",
+            # Not the widget NVRC's own landing pages advertise: that one
+            # refuses every calendar below. This is the one its schedule
+            # links actually use.
+            "widget_id": "a28b2c65-61af-407f-80d1-eaa58f30a94a",
+            "calendar_id": calendar_id,
+            "calendar_label": label,
+            "activity_type": activity_type,
+        }
+        for calendar_id, label, activity_type in (
+            ("fabf60eb-7cf3-40c3-8004-79e50fdc6db0", "Swim Schedules", "Swimming"),
+            ("9290cb7e-d450-4972-b327-b89aa12b2a69", "Skate Schedules", "Skating"),
+            ("d313e7d8-0d72-4e0b-92c5-98d8017ab64e", "Open Gym Schedules", "Sports"),
+            (
+                "443499b3-3e7d-454d-acae-4e02474fef9f",
+                "Fitness Studio Workouts",
+                "Fitness",
+            ),
+        )
+    ),
+    # City of Richmond, on PerfectMind. Ice only, because ice is all its
+    # PerfectMind tenant publishes as drop-ins — a crawl of the city's own
+    # recreation pages found five calendars and these are the two with
+    # anything in them.
+    #
+    # Everything here is named "REGISTERED VISIT - ...", which is Richmond
+    # saying a drop-in needs booking ahead, the same thing Coquitlam means
+    # by "pre-registration recommended". Richmond also keeps an ActiveNet
+    # tenant (org "cityofrichmond"), which is the likely home of its pool
+    # and gym schedules and is not configured here yet.
+    *(
+        {
+            "source_name": "City of Richmond",
+            "base_url": "https://richmondcity.perfectmind.com",
+            "org_path": "23650/Clients",
+            "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+            "calendar_id": calendar_id,
+            "calendar_label": label,
+            "activity_type": "Skating",
+        }
+        for calendar_id, label in (
+            ("8bd697eb-ee1e-4067-b6bb-be1901a7753d", "Richmond Ice Centre"),
+            ("5bc32e4a-6607-47f5-8513-53b2dbc4f83e", "Minoru Arenas"),
+        )
+    ),
     # District of West Vancouver, on ActiveNet.
     #
     # Filtered by type rather than by category. West Vancouver's categories
@@ -447,6 +503,8 @@ FACILITY_COORDS = {
     # City of Port Moody
     "Port Moody Recreation Complex": (49.283211, -122.831651),
     "Rocky Point Pool": (49.279625, -122.849257),
+    # Port Moody's adult and senior drop-ins run here, not at the complex.
+    "Kyle Centre": (49.276125, -122.857062),
     # Port Moody's adult and senior drop-ins run here rather than at the
     # rec complex. No coordinates yet, so no pin — see
     # VENUES_AWAITING_COORDS, which cannot enforce it for a PerfectMind
@@ -519,6 +577,18 @@ FACILITY_COORDS = {
     "Trout Lake Rink": (49.255288, -123.065129),
     "West End Cmty Centre": (49.290204, -123.136251),
     "West End Rink": (49.290159, -123.135966),
+    # District of West Vancouver
+    # From OpenStreetMap, like the rest, and each checked against the
+    # municipality in the result rather than taken on trust: a plain search
+    # for "West Vancouver Aquatic Centre" confidently returns Vancouver's
+    # West End one, four kilometres and a different city away.
+    "West Vancouver Community Centre": (49.331351, -123.169198),
+    "West Vancouver Ice Arena": (49.332142, -123.170307),
+    "West Vancouver Seniors' Activity Centre": (49.330729, -123.168810),
+    "Gleneagles Community Centre": (49.364069, -123.277799),
+    # The clubhouse rather than the middle of the course, for the reason
+    # given against Burnaby's two above.
+    "Gleneagles Golf Course": (49.363878, -123.279143),
     # Outdoor pools, mapped to their park's centre rather than the pool
     # itself — OSM has the park but not the pool building.
     "Hume Park": (49.235173, -122.890505),
@@ -539,13 +609,13 @@ FACILITY_COORDS = {
 # the top of the menu into FACILITY_COORDS, and delete the name from here.
 VENUES_AWAITING_COORDS = frozenset(
     {
-        # District of West Vancouver
-        "West Vancouver Community Centre",
+        # District of West Vancouver. The rest are mapped; these two are
+        # not in OpenStreetMap under any name tried, and the searches that
+        # did return something returned the wrong building — Vancouver's
+        # West End aquatic centre for the first, and merely the address fed
+        # to it for the second. A wrong pin is worse than no pin, so they
+        # wait for someone with a map.
         "West Vancouver Aquatic Centre",
-        "West Vancouver Ice Arena",
-        "Gleneagles Community Centre",
-        "Gleneagles Golf Course",
-        "West Vancouver Seniors' Activity Centre",
         "West Vancouver Youth Hub",
     }
 )
@@ -568,6 +638,13 @@ AREAS = (
     {"name": "Burnaby", "cities": ("City of Burnaby",)},
     {"name": "Vancouver", "cities": ("City of Vancouver",)},
     {"name": "West Vancouver", "cities": ("District of West Vancouver",)},
+    {
+        "name": "North Vancouver",
+        # One commission serves the City and the District alike, so this is
+        # the rare area whose name is not a city's.
+        "cities": ("North Vancouver Recreation & Culture",),
+    },
+    {"name": "Richmond", "cities": ("City of Richmond",)},
 )
 
 # Built once at import: {source_name -> area name}, so annotating an event

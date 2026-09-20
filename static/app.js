@@ -994,6 +994,11 @@
       // is Vancouver, so gold is the one it must not be mistaken for, and
       // the green this started as fell to the rule above it.
       "West Vancouver": "#4338ca",
+      // Cyan and magenta are what is left that no neighbour is near.
+      // North Vancouver sits beside West Vancouver's indigo and across the
+      // water from Vancouver's gold; Richmond sits below that same gold.
+      "North Vancouver": "#0e7490",
+      Richmond: "#a21caf",
     };
     const AREA_FALLBACK_COLOR = "#64748b";
 
