@@ -88,24 +88,13 @@ SOURCES = [
         "calendar_label": "Swimming (pre-registration recommended)",
         "activity_type": "Swimming",
     },
-    {
-        "source_name": "City of Port Moody",
-        "base_url": "https://cityofportmoody.perfectmind.com",
-        "org_path": "Contacts",
-        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
-        "calendar_id": "23606733-2ecf-4fb0-8fbf-d80a45d29c6d",
-        "calendar_label": "Public Swim - Rocky Point",
-        "activity_type": "Swimming",
-    },
-    {
-        "source_name": "City of Port Moody",
-        "base_url": "https://cityofportmoody.perfectmind.com",
-        "org_path": "Contacts",
-        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
-        "calendar_id": "97cc9ef0-3e47-46a7-ba0f-bc6015233c7c",
-        "calendar_label": "Public Swim - Westhill Pool",
-        "activity_type": "Swimming",
-    },
+    # Port Moody's two public-swim calendars used to be here and are gone.
+    # Both now answer "Calendar is not allowed for the widget", and the
+    # city's own public-swimming page still links to those same dead ids,
+    # as does its swim-lessons page to two others. So there is no working
+    # swim calendar to point at — this is Port Moody's outage, not a stale
+    # id here, and it cost the dashboard a red "temporarily unavailable"
+    # banner on every visit. They come back when the city republishes them.
     {
         "source_name": "City of Port Moody",
         "base_url": "https://cityofportmoody.perfectmind.com",
@@ -136,6 +125,45 @@ SOURCES = [
         "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
         "calendar_id": "008df9ef-8184-4ccb-8bd8-81bd52129eff",
         "calendar_label": "Drop-in Children & Family",
+        "activity_type": "All Ages",
+    },
+    # Three more of Port Moody's drop-in calendars, found while working out
+    # what had happened to the swims. They were never configured, and they
+    # carry most of what the city actually publishes: the fitness one alone
+    # returns more sessions than every other Port Moody calendar together.
+    #
+    # Two live ones are deliberately left out. "Weight Room" is orientation
+    # appointments rather than sessions to attend, and "Childminding" is a
+    # service you book while you use the building, not an activity — both
+    # would be noise on a schedule of things to turn up to.
+    {
+        "source_name": "City of Port Moody",
+        "base_url": "https://cityofportmoody.perfectmind.com",
+        "org_path": "Contacts",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "e63d05c2-8f38-4a38-9df7-b0f2e46ffe14",
+        "calendar_label": "Drop-in Fitness",
+        "activity_type": "Fitness",
+    },
+    {
+        "source_name": "City of Port Moody",
+        "base_url": "https://cityofportmoody.perfectmind.com",
+        "org_path": "Contacts",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "e0c249df-26d1-4953-98b5-5b5c2d9db684",
+        # Mixed, like Coquitlam's adult calendar: table tennis and tai chi
+        # beside bridge and board games, so classify_activity names the
+        # ones it recognises and the rest fall here.
+        "calendar_label": "Drop-in Adult & Senior Recreation",
+        "activity_type": "Adult",
+    },
+    {
+        "source_name": "City of Port Moody",
+        "base_url": "https://cityofportmoody.perfectmind.com",
+        "org_path": "Contacts",
+        "widget_id": "15f6af07-39c5-473e-b053-96653f77a406",
+        "calendar_id": "00218b3e-d8db-47c2-b327-a9d118239a65",
+        "calendar_label": "Drop-in Early Years",
         "activity_type": "All Ages",
     },
     {
@@ -419,6 +447,11 @@ FACILITY_COORDS = {
     # City of Port Moody
     "Port Moody Recreation Complex": (49.283211, -122.831651),
     "Rocky Point Pool": (49.279625, -122.849257),
+    # Port Moody's adult and senior drop-ins run here rather than at the
+    # rec complex. No coordinates yet, so no pin — see
+    # VENUES_AWAITING_COORDS, which cannot enforce it for a PerfectMind
+    # source because those learn their venue names by scraping.
+    # "Kyle Centre": (?, ?),
     "Westhill Pool": (49.284250, -122.879587),
     # City of Port Coquitlam
     "Port Coquitlam Community Centre": (49.260084, -122.777032),
