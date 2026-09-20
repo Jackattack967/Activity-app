@@ -1,16 +1,14 @@
-"""TEMPORARY. Last automatic attempt to find Port Moody's swim schedule.
+"""TEMPORARY. Identify Port Moody's live calendars and find the swims.
 
-Previous attempt got two things wrong. It called every candidate widget a
-hit because it only looked for one refusal string, when an unknown widget
-returns a *different* error page (15,074 bytes) from a forbidden calendar
-(15,116) — both errors, neither a calendar. And it guessed five URLs on
-portmoody.ca, all of which 404.
+The crawl found four calendar ids on the city's own recreation pages, all
+on the widget already in config — so the widget was never wrong and the two
+ids in config are simply dead. What those four are is still unknown, and
+only a "Classes" calendar is the drop-in kind this scraper reads.
 
-So: judge a page by what a working one looks like (~31,800 bytes, a token,
-no "Error Page"), and find the city's real recreation pages by crawling
-from its home page rather than guessing.
+This names each one and shows what it returns, and crawls one level deeper
+in case the swim schedules sit on a page the first pass did not reach.
 
-Delete once this is settled, either way.
+Delete once config is fixed.
 """
 
 from __future__ import annotations
@@ -23,95 +21,67 @@ import scraper_perfectmind as pm
 
 session = pm._build_session()
 HEADERS = {"User-Agent": pm.USER_AGENT}
-ROCKY = next(
-    s for s in config.SOURCES if s.get("calendar_label") == "Public Swim - Rocky Point"
-)
-WORKING = next(
-    s for s in config.SOURCES if s.get("calendar_label") == "Drop-in Ice Sports"
-)
+MOODY = next(s for s in config.SOURCES if s["source_name"] == "City of Port Moody")
+KNOWN = {s["calendar_id"] for s in config.SOURCES if s["source_name"] == "City of Port Moody"}
 
-
-def looks_like_a_calendar(text: str) -> bool:
-    """What a page that actually renders a calendar looks like."""
-    return (
-        len(text) > 20000
-        and bool(pm.TOKEN_TAG_RE.search(text))
-        and "Error Page" not in text
-    )
-
-
-print("=== 0. CALIBRATION: a known-good page and a known-bad one")
-for label, source in (("working (Ice Sports)", WORKING), ("broken (Rocky Point)", ROCKY)):
-    resp = session.get(
-        f"{source['base_url']}/{source['org_path']}/BookMe4BookingPages/Classes"
-        f"?calendarId={source['calendar_id']}&widgetId={source['widget_id']}&embed=False",
-        headers=HEADERS,
-        timeout=20,
-    )
-    print(
-        f"    {label:<22} {len(resp.text):>6} bytes  "
-        f"calendar={looks_like_a_calendar(resp.text)}"
-    )
-
-print("\n=== 1. PORT MOODY'S REAL PAGES, CRAWLED FROM THE HOME PAGE")
-home = "https://www.portmoody.ca/"
-try:
-    page = session.get(home, headers=HEADERS, timeout=25)
-    print(f"    home page HTTP {page.status_code}, {len(page.text)} bytes")
-except Exception as exc:  # noqa: BLE001
-    print(f"    home page failed: {type(exc).__name__}: {exc}")
-    raise SystemExit
-
-links = {
-    urljoin(home, href)
-    for href in re.findall(r'href="([^"]+)"', page.text)
-    if not href.startswith(("mailto:", "tel:", "#"))
-}
-interesting = sorted(
-    l
-    for l in links
-    if l.startswith("https://www.portmoody.ca")
-    and re.search(r"recreat|swim|schedule|pool|drop|arena|activit", l, re.I)
-)
-print(f"    {len(links)} links on the home page, {len(interesting)} recreation-ish:")
-for link in interesting[:20]:
-    print(f"      {link}")
-
-print("\n=== 2. PERFECTMIND LINKS ON THOSE PAGES")
-found = {}
-for link in interesting[:12]:
-    try:
-        sub = session.get(link, headers=HEADERS, timeout=20)
-    except Exception as exc:  # noqa: BLE001
-        print(f"    {link} -> {type(exc).__name__}")
+print("=== 1. CRAWL THE RECREATION SECTION FOR EVERY CALENDAR ID")
+roots = [
+    "https://www.portmoody.ca/parks-recreation-and-environment/recreation/",
+    "https://www.portmoody.ca/parks-recreation-and-environment/recreation/recreation-guide-and-registration/",
+    "https://www.portmoody.ca/parks-recreation-and-environment/facilities-fields-and-rentals/",
+]
+seen_pages, found = set(), {}
+queue = list(roots)
+while queue and len(seen_pages) < 25:
+    url = queue.pop(0)
+    if url in seen_pages:
         continue
-    hits = set(re.findall(r"https?://[^\"'\s<>]*perfectmind[^\"'\s<>]*", sub.text))
-    if hits:
-        print(f"    {link} -> {len(hits)} link(s)")
-    for hit in hits:
-        found.setdefault(hit.replace("&amp;", "&"), link)
+    seen_pages.add(url)
+    try:
+        page = session.get(url, headers=HEADERS, timeout=20)
+    except Exception:  # noqa: BLE001
+        continue
+    for cid in re.findall(r"calendarId=([0-9a-f-]{36})", page.text):
+        found.setdefault(cid, url)
+    if url in roots:
+        for href in re.findall(r'href="([^"]+)"', page.text):
+            link = urljoin(url, href.replace("&amp;", "&"))
+            if link.startswith(url) and link not in seen_pages:
+                queue.append(link)
+print(f"    crawled {len(seen_pages)} pages, found {len(found)} calendar ids")
 
-if not found:
-    print("    none found on any crawled page")
-for link in sorted(found):
-    cal = re.search(r"calendarId=([0-9a-f-]{36})", link)
-    wid = re.search(r"widgetId=([0-9a-f-]{36})", link)
-    print(f"\n    {link[:150]}")
-    if cal:
-        print(f"        calendarId {cal.group(1)}")
-    if wid:
-        print(f"        widgetId   {wid.group(1)}")
-    if cal and wid:
-        try:
-            probe = session.get(
-                f"{ROCKY['base_url']}/{ROCKY['org_path']}/BookMe4BookingPages/Classes"
-                f"?calendarId={cal.group(1)}&widgetId={wid.group(1)}&embed=False",
-                headers=HEADERS,
-                timeout=20,
-            )
-            print(
-                f"        renders a calendar: {looks_like_a_calendar(probe.text)} "
-                f"({len(probe.text)} bytes)"
-            )
-        except Exception as exc:  # noqa: BLE001
-            print(f"        probe failed: {type(exc).__name__}")
+print("\n=== 2. WHAT EACH ONE IS, AND WHAT IT RETURNS")
+for cid, where in sorted(found.items()):
+    probe = {**MOODY, "calendar_id": cid}
+    try:
+        resp = session.get(
+            f"{MOODY['base_url']}/{MOODY['org_path']}/BookMe4BookingPages/Classes"
+            f"?calendarId={cid}&widgetId={MOODY['widget_id']}&embed=False",
+            headers=HEADERS,
+            timeout=20,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"\n    {cid}  request failed: {type(exc).__name__}")
+        continue
+
+    title = ""
+    for pattern in (r"<title>\s*(.*?)\s*</title>", r'id="calendarName"[^>]*>\s*(.*?)\s*<'):
+        match = re.search(pattern, resp.text, re.S | re.I)
+        if match:
+            title = re.sub(r"\s+", " ", match.group(1))[:70]
+            break
+    mark = "  <- already in config" if cid in KNOWN else ""
+    print(f"\n    {cid}{mark}")
+    print(f"        title: {title}")
+    print(f"        found on: {where.rsplit('/', 2)[-2]}")
+    if "Error Page" in resp.text:
+        print("        DEAD: error page")
+        continue
+    try:
+        events = pm.fetch_calendar_events(probe, config.SCHEDULE_WINDOW_DAYS)
+    except Exception as exc:  # noqa: BLE001
+        print(f"        fetch raised {type(exc).__name__}")
+        continue
+    print(f"        {len(events)} events in {config.SCHEDULE_WINDOW_DAYS} days")
+    for ev in events[:6]:
+        print(f"          {ev.date} {ev.start_time:>8}  {ev.event_name[:38]:<38} @ {ev.location[:28]}")
