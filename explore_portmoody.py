@@ -1,11 +1,15 @@
-"""TEMPORARY. Recover Port Moody's current public-swim calendar ids.
+"""TEMPORARY. Find which widget may still show Port Moody's public swims.
 
-Established: the two ids in config return an identical 15,116-byte error
-page while working calendars return ~31,800 bytes, so those calendars are
-gone rather than empty. What is not yet known is what replaced them.
+The error is explicit: "Calendar is not allowed for the widget." So the
+calendar is not necessarily gone — the widget in config is no longer
+permitted to render it. Port Moody's landing page for that widget mentions
+"swim" nowhere, which fits.
 
-The widget's landing page yielded no calendarId links to the first pass, so
-this looks at what it actually contains.
+Two ways to find where it went, both cheap:
+  1. That landing page carries 33 GUIDs. Some are widget ids. Try each as
+     a widget for the swim calendar and see which renders.
+  2. Read Port Moody's own website and take whatever PerfectMind links it
+     publishes today, which is what a visitor would follow.
 
 Delete once the ids are fixed.
 """
@@ -17,58 +21,70 @@ import re
 import config
 import scraper_perfectmind as pm
 
-MOODY = next(s for s in config.SOURCES if s["source_name"] == "City of Port Moody")
 session = pm._build_session()
 HEADERS = {"User-Agent": pm.USER_AGENT}
-
-print("=== 1. WHAT THE ERROR PAGE ACTUALLY SAYS")
-dead = next(
-    s
-    for s in config.SOURCES
-    if s.get("calendar_label") == "Public Swim - Rocky Point"
+MOODY = next(s for s in config.SOURCES if s["source_name"] == "City of Port Moody")
+ROCKY = next(
+    s for s in config.SOURCES if s.get("calendar_label") == "Public Swim - Rocky Point"
 )
-resp = session.get(
-    f"{dead['base_url']}/{dead['org_path']}/BookMe4BookingPages/Classes"
-    f"?calendarId={dead['calendar_id']}&widgetId={dead['widget_id']}&embed=False",
-    headers=HEADERS,
-    timeout=20,
-)
-text = re.sub(r"<script.*?</script>|<style.*?</style>", " ", resp.text, flags=re.S | re.I)
-text = re.sub(r"<[^>]+>", " ", text)
-text = re.sub(r"\s+", " ", text).strip()
-print(f"    {text[:600]}")
+ERROR_MARKER = "not allowed for the widget"
 
-print("\n=== 2. EVERY GUID ON THE WIDGET LANDING PAGE, WITH ITS LABEL")
+print("=== 1. IS THERE A WIDGET THAT STILL RENDERS THE SWIM CALENDAR?")
 resp = session.get(
     f"{MOODY['base_url']}/{MOODY['org_path']}/BookMe4?widgetId={MOODY['widget_id']}",
     headers=HEADERS,
     timeout=20,
 )
-print(f"    landing page HTTP {resp.status_code}, {len(resp.text)} bytes")
-guids = {}
-for match in re.finditer(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", resp.text):
-    guid = match.group(0)
-    if guid in guids:
+guids = sorted(
+    set(
+        re.findall(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", resp.text
+        )
+    )
+)
+guids = [g for g in guids if g != "00000000-0000-0000-0000-000000000000"]
+print(f"    trying {len(guids)} candidate widget ids against the Rocky Point calendar")
+for guid in guids:
+    try:
+        probe = session.get(
+            f"{ROCKY['base_url']}/{ROCKY['org_path']}/BookMe4BookingPages/Classes"
+            f"?calendarId={ROCKY['calendar_id']}&widgetId={guid}&embed=False",
+            headers=HEADERS,
+            timeout=15,
+        )
+    except Exception as exc:  # noqa: BLE001
+        print(f"    {guid}  request failed: {type(exc).__name__}")
         continue
-    window = resp.text[max(0, match.start() - 300) : match.start() + 300]
-    labels = [
-        n.strip()
-        for n in re.findall(r">\s*([A-Za-z][^<>{}]{3,60}?)\s*<", window)
-        if n.strip() and not n.strip().startswith(("var ", "function"))
-    ]
-    guids[guid] = labels[:3]
-for guid, labels in guids.items():
-    marker = " <- in config" if any(
-        guid == s.get("calendar_id") or guid == s.get("widget_id")
-        for s in config.SOURCES
-    ) else ""
-    print(f"    {guid}{marker}")
-    for label in labels:
-        print(f"        {label[:70]}")
-print(f"    ({len(guids)} distinct GUIDs)")
+    if ERROR_MARKER in probe.text:
+        continue  # the same refusal; not it
+    print(f"    {guid}  -> {len(probe.text)} bytes, NO refusal. Candidate.")
+print("    (done; silence above means every candidate was refused too)")
 
-print("\n=== 3. ANY 'SWIM' TEXT ON THE LANDING PAGE")
-for match in re.finditer(r"[Ss]wim[A-Za-z ]{0,40}", resp.text):
-    snippet = match.group(0).strip()
-    if len(snippet) > 4:
-        print(f"    {snippet[:70]}")
+print("\n=== 2. WHAT PORT MOODY'S OWN SITE LINKS TO TODAY")
+PAGES = (
+    "https://www.portmoody.ca/en/parks-and-recreation/drop-in-schedules.aspx",
+    "https://www.portmoody.ca/en/parks-and-recreation/swimming.aspx",
+    "https://www.portmoody.ca/en/parks-and-recreation/recreation-schedules.aspx",
+    "https://www.portmoody.ca/en/parks-and-recreation/arenas-and-pools.aspx",
+    "https://www.portmoody.ca/en/parks-and-recreation.aspx",
+)
+found = {}
+for url in PAGES:
+    try:
+        page = session.get(url, headers=HEADERS, timeout=20)
+    except Exception as exc:  # noqa: BLE001
+        print(f"    {url} -> {type(exc).__name__}")
+        continue
+    hits = re.findall(r"https?://[^\"'\s<>]*perfectmind[^\"'\s<>]*", page.text)
+    print(f"    {url} -> HTTP {page.status_code}, {len(hits)} PerfectMind link(s)")
+    for hit in hits:
+        found.setdefault(hit, url)
+
+for link in sorted(found):
+    print(f"\n    {link}")
+    cal = re.search(r"calendarId=([0-9a-f-]{36})", link)
+    wid = re.search(r"widgetId=([0-9a-f-]{36})", link)
+    if cal:
+        print(f"        calendarId {cal.group(1)}")
+    if wid:
+        print(f"        widgetId   {wid.group(1)}")
