@@ -111,14 +111,20 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       # A scratch probe, present only while a city is being worked out.
-      - name: Run the temporary portal probe, if there is one
-        if: hashFiles('explore_vancouver.py') != ''
+      # Any explore_*.py, not one named file: the pattern that decides
+      # whether this job runs at all is already a glob, so naming a single
+      # script here meant the next probe was pushed, triggered the run, and
+      # then sat there not being executed by it.
+      - name: Run any temporary portal probes
         run: |
-          {
-            echo ""
-            echo "########## explore_vancouver.py ##########"
-            python explore_vancouver.py 2>&1 || echo "probe failed"
-          } >> /tmp/report.txt
+          shopt -s nullglob
+          for probe in explore_*.py; do
+            {
+              echo ""
+              echo "########## $probe ##########"
+              python "$probe" 2>&1 || echo "probe failed"
+            } >> /tmp/report.txt
+          done
 
       # The run summary is only readable by someone looking at the run. A
       # commit comment reaches the commit's own page, shows up in the repo's
