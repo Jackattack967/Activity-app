@@ -34,17 +34,7 @@ from.
 - [`app.py`](app.py) is a small Flask app that fetches all configured
   calendars, caches the merged result in memory for 15 minutes
   (`CACHE_TTL_SECONDS` in `config.py`), and serves it as a dashboard page and
-  a `/api/events` JSON endpoint. A stale cache is served as it stands and
-  refreshed behind the request, so no page load waits on a scrape — see
-  `_get_events`, and [`test_cache.py`](test_cache.py) for what that
-  guarantees.
-- The page is served without the portals' own session descriptions, which
-  measured a third of its bytes and are read one at a time in the detail
-  pane; `hydrateDetails()` in `static/app.js` fetches them once the
-  schedule is on screen. With gzip, that took a live page from 2.30MB to
-  135KB on the wire. [`test_payload.py`](test_payload.py) holds both in
-  place, because the regression is silent — the page still works, it is
-  just several times heavier.
+  a `/api/events` JSON endpoint.
 - The dashboard (`templates/index.html` + `static/app.js`) lets you filter by
   activity type, area, location, keyword, and "open spots only", grouped by
   day — or shows the same filtered set on a map.
