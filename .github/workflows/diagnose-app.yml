@@ -14,6 +14,11 @@ name: Diagnose why the app is unreachable
 # the token in it: only the status code, the timings, and the size of what
 # came back.
 
+# Needed to post the report back; without it the POST is refused and the
+# job still succeeds, which is how the first run produced nothing.
+permissions:
+  contents: write
+
 on:
   push:
     paths:
@@ -31,30 +36,28 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [ -z "$WATCH_CHECK_URL" ]; then
-            echo "report=WATCH_CHECK_URL is not set in this repository." \
-              >> "$GITHUB_ENV"
-            exit 0
-          fi
+            echo "WATCH_CHECK_URL is not set in this repository." > /tmp/report.txt
+          else
 
-          # The host alone, so the report can say whether DNS even resolves
-          # without ever echoing the path or its token.
-          host=$(printf '%s' "$WATCH_CHECK_URL" | sed -E 's#^https?://##; s#[/?].*##')
+            # The host alone, so the report can say whether DNS even resolves
+            # without ever echoing the path or its token.
+            host=$(printf '%s' "$WATCH_CHECK_URL" | sed -E 's#^https?://##; s#[/?].*##')
 
-          {
-            echo "Host: $host"
-            echo "Resolves: $(getent hosts "$host" >/dev/null 2>&1 && echo yes || echo no)"
-            echo ""
-          } > /tmp/report.txt
+            {
+              echo "Host: $host"
+              echo "Resolves: $(getent hosts "$host" >/dev/null 2>&1 && echo yes || echo no)"
+              echo ""
+            } > /tmp/report.txt
 
-          for attempt in 1 2 3; do
-            # %{http_code} is 000 when no HTTP response arrived at all,
-            # and curl's own exit code then says why.
-            out=$(curl -sS -o /tmp/body.txt -w '%{http_code} %{time_total}s %{size_download}B' \
-                    --max-time 120 "$WATCH_CHECK_URL" 2>/tmp/err.txt) || true
-            code=$?
-            echo "Attempt $attempt: ${out:-no response}  (curl exit $code)" >> /tmp/report.txt
-            if [ -s /tmp/err.txt ]; then
-              echo "  curl said: $(head -c 200 /tmp/err.txt)" >> /tmp/report.txt
+            for attempt in 1 2 3; do
+              # %{http_code} is 000 when no HTTP response arrived at all,
+              # and curl's own exit code then says why.
+              out=$(curl -sS -o /tmp/body.txt -w '%{http_code} %{time_total}s %{size_download}B' \
+                      --max-time 120 "$WATCH_CHECK_URL" 2>/tmp/err.txt) || true
+              code=$?
+              echo "Attempt $attempt: ${out:-no response}  (curl exit $code)" >> /tmp/report.txt
+              if [ -s /tmp/err.txt ]; then
+                echo "  curl said: $(head -c 200 /tmp/err.txt)" >> /tmp/report.txt
             fi
             # Only the shape of the body, never its contents: an error page
             # from the app could echo the request back, token and all.
@@ -64,6 +67,8 @@ jobs:
             fi
             sleep 10
           done
+
+          fi
 
           cat /tmp/report.txt
 
