@@ -268,6 +268,41 @@
     } catch (err) {
       console.error("Could not parse events data:", err);
     }
+
+    // The portal descriptions are not in what the page is served with: they
+    // are a third of the schedule's bytes and only ever read one at a time,
+    // in the detail pane. They are fetched once the page is up and merged
+    // in below, so the first paint carries 135KB rather than 360KB.
+    async function hydrateDetails() {
+      if (!allEvents.length) return;
+      try {
+        const resp = await fetch("/api/events");
+        if (!resp.ok) return;
+        const data = await resp.json();
+        if (!Array.isArray(data.events)) return;
+        const byKey = new Map();
+        for (const ev of data.events) {
+          if (ev.details) byKey.set(eventKey(ev), ev.details);
+        }
+        // Matched by key rather than by position: this response may be a
+        // newer scrape than the page was rendered from, in which case the
+        // two lists need not line up at all, and a description attached to
+        // the wrong session is worse than none.
+        let merged = 0;
+        for (const ev of allEvents) {
+          const details = byKey.get(eventKey(ev));
+          if (details && !ev.details) {
+            ev.details = details;
+            merged += 1;
+          }
+        }
+        // Anything already open was drawn without a description.
+        if (merged && selectedKey) render();
+      } catch (err) {
+        // A missing description costs a paragraph in one pane. Everything
+        // else on the page came with the page.
+      }
+    }
     let loggedIn = false;
     // Whether this deployment has accounts at all. The star is shown to
     // signed-out visitors too — see buildFavoriteButton — so this, not
@@ -2241,5 +2276,11 @@
         render();
       }
     })();
+
+    // After the first paint, never before it: the schedule is on screen by
+    // now, and this only fills in the descriptions the detail pane shows.
+    // Inside runApp, where hydrateDetails is in scope, and outside the
+    // preferences block above, which does not run for every visitor.
+    hydrateDetails();
   }
 })();

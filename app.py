@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask_compress import Compress
 from flask_login import current_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -49,6 +50,23 @@ app = Flask(__name__)
 # Without this, url_for(_external=True) builds the OAuth redirect URI as
 # http:// — which won't match the https:// URI registered with Google.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Nothing else in the stack compresses: gunicorn does not, and Render's
+# proxy cannot be relied on to. The schedule is JSON, which is the best
+# case for gzip — measured at 6.5x on live data — and it is the bulk of
+# every page load, so this is the single largest saving available on the
+# phone this is mostly read on.
+app.config["COMPRESS_MIMETYPES"] = [
+    "text/html",
+    "text/css",
+    "text/javascript",
+    "application/javascript",
+    "application/json",
+    "image/svg+xml",
+]
+# Below about a packet, compressing costs more than it saves.
+app.config["COMPRESS_MIN_SIZE"] = 1024
+Compress(app)
 
 # Accounts are an optional layer: the schedule dashboard is the core of this
 # app and must keep working even if the database or Google credentials are
@@ -439,7 +457,9 @@ def _favorited_keys() -> tuple[set, set]:
     return activity_keys, session_keys
 
 
-def _annotate_favorites(events: list[dict]) -> list[dict]:
+def _annotate_favorites(
+    events: list[dict], include_details: bool = True
+) -> list[dict]:
     # Cached event dicts are shared across all requests/users — never mutate
     # them in place, or one user's favorite would leak into everyone's view.
     activity_keys, session_keys = _favorited_keys()
@@ -453,16 +473,18 @@ def _annotate_favorites(events: list[dict]) -> list[dict]:
             or (source, name, None) in activity_keys
         )
         watched_session = (source, name, location, e.get("date") or "") in session_keys
-        out.append(
-            {
-                **e,
-                "is_favorited": watched_activity or watched_session,
-                # Lets the UI say which kind of watch is in effect.
-                "favorite_scope": "activity"
-                if watched_activity
-                else ("session" if watched_session else None),
-            }
-        )
+        row = {
+            **e,
+            "is_favorited": watched_activity or watched_session,
+            # Lets the UI say which kind of watch is in effect.
+            "favorite_scope": "activity"
+            if watched_activity
+            else ("session" if watched_session else None),
+        }
+        if not include_details:
+            # Dropped from this copy, never from the cached dict above.
+            row.pop("details", None)
+        out.append(row)
     return out
 
 
@@ -484,7 +506,13 @@ def _login_links() -> list[dict]:
 @app.route("/")
 def index():
     data = _get_events()
-    events = _annotate_favorites(data["events"])
+    # Without the portal's descriptions, which are a third of the payload
+    # and are read one at a time in the detail pane. The page renders from
+    # what is inlined here and then fetches the full schedule in the
+    # background — see hydrateDetails() in app.js. On live data this takes
+    # the inlined JSON from 2.3MB to 1.5MB, and 360KB to 135KB over the
+    # wire once the compression above has had its turn.
+    events = _annotate_favorites(data["events"], include_details=False)
     activity_types = sorted({e["activity_type"] for e in events})
     locations = sorted({e["location"] for e in events if e["location"]})
     source_names = sorted({s["source_name"] for s in config.SOURCES})
