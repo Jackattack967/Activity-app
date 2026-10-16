@@ -127,8 +127,26 @@ else:
             "sign-in. The schedule dashboard will still work."
         )
 
+# Two locks, doing two different jobs.
+#
+# _cache_lock guards the dictionary below and is held only long enough to
+# read it or swap a new result in — microseconds, never a network call. It
+# used to be held across the entire scrape, which meant every page load
+# queued behind whichever thread happened to be scraping. With one gunicorn
+# worker and a watch pass running every five minutes, that was the site
+# stalling for tens of seconds, several times an hour, for everyone.
+#
+# _scrape_lock is what stops two threads scraping at once. A caller that
+# can serve slightly stale data never waits on it at all.
 _cache_lock = threading.Lock()
+_scrape_lock = threading.Lock()
 _cache: dict = {"events": [], "errors": [], "fetched_at": 0.0}
+
+# A forced refresh that arrives while another just finished takes that
+# result instead of scraping again immediately behind it. This is what keeps
+# the watch pass, the external scheduler and anyone hammering
+# /api/events?refresh=1 from stacking scrapes onto the portals.
+FORCED_REFRESH_COALESCE_SECONDS = 30
 
 
 def _with_place(event: dict) -> dict:
@@ -184,14 +202,40 @@ def _activity_groups(events: list[dict]) -> list[dict]:
     return groups
 
 
-def _get_events(force: bool = False) -> dict:
+def _snapshot() -> dict:
+    """The cache as it stands, read under the lock and nothing more."""
     with _cache_lock:
-        is_stale = (time.time() - _cache["fetched_at"]) > config.CACHE_TTL_SECONDS
-        if force or is_stale or not _cache["fetched_at"]:
-            events, errors = scraper.fetch_all_events(
-                config.SOURCES, config.SCHEDULE_WINDOW_DAYS
-            )
-            fresh = [_with_place(dataclasses.asdict(e)) for e in events]
+        return {
+            "events": _cache["events"],
+            "errors": _cache["errors"],
+            "fetched_at": _cache["fetched_at"],
+        }
+
+
+def _refresh(min_age: float = 0.0) -> dict:
+    """Scrape every source and publish the result, unless someone just did.
+
+    The scrape runs *outside* _cache_lock. That is the whole point: the
+    cache stays readable throughout, so page loads are served from it while
+    this is still talking to nine cities' portals.
+
+    min_age coalesces callers. Threads queue on _scrape_lock, and whoever
+    gets in second finds the first one's result already published; if it is
+    younger than min_age, that result is taken rather than scraping again
+    straight behind it.
+    """
+    with _scrape_lock:
+        snapshot = _snapshot()
+        if snapshot["fetched_at"] and (time.time() - snapshot["fetched_at"]) < min_age:
+            return snapshot
+
+        # Slow. Deliberately not holding _cache_lock here.
+        events, errors = scraper.fetch_all_events(
+            config.SOURCES, config.SCHEDULE_WINDOW_DAYS
+        )
+        fresh = [_with_place(dataclasses.asdict(e)) for e in events]
+
+        with _cache_lock:
             if not fresh and errors and _cache["events"]:
                 # Every source failed. That means the portals were
                 # unreachable, not that every session was cancelled — so
@@ -208,11 +252,51 @@ def _get_events(force: bool = False) -> dict:
                 _cache["events"] = fresh
                 _cache["errors"] = errors
                 _cache["fetched_at"] = time.time()
-        return {
-            "events": _cache["events"],
-            "errors": _cache["errors"],
-            "fetched_at": _cache["fetched_at"],
-        }
+            return {
+                "events": _cache["events"],
+                "errors": _cache["errors"],
+                "fetched_at": _cache["fetched_at"],
+            }
+
+
+def _refresh_in_background() -> None:
+    """Start a refresh if one is not already running, and return at once."""
+    # A try-acquire rather than a flag: _scrape_lock is already the thing
+    # that knows whether a scrape is in flight. Losing this race only costs
+    # a thread that finds the cache fresh and returns without scraping.
+    if not _scrape_lock.acquire(blocking=False):
+        return
+    _scrape_lock.release()
+    threading.Thread(
+        target=_refresh,
+        kwargs={"min_age": config.CACHE_TTL_SECONDS},
+        name="schedule-refresh",
+        daemon=True,
+    ).start()
+
+
+def _get_events(force: bool = False) -> dict:
+    """The schedule, without making the caller wait for a scrape.
+
+    A stale cache is served as-is and refreshed behind the request. Staleness
+    is visible either way — the page prints when the schedule was fetched —
+    and a schedule a few minutes old now beats the right one in twenty
+    seconds, particularly on the phone this is mostly read on.
+
+    Only two things still wait: a forced refresh, which is asking for fresh
+    data by definition, and the first request after a boot, when there is
+    nothing to serve instead.
+    """
+    if force:
+        return _refresh(min_age=FORCED_REFRESH_COALESCE_SECONDS)
+
+    snapshot = _snapshot()
+    if not snapshot["fetched_at"]:
+        return _refresh()
+
+    if (time.time() - snapshot["fetched_at"]) > config.CACHE_TTL_SECONDS:
+        _refresh_in_background()
+    return snapshot
 
 
 def _is_logged_in() -> bool:

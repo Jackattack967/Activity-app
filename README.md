@@ -34,7 +34,10 @@ from.
 - [`app.py`](app.py) is a small Flask app that fetches all configured
   calendars, caches the merged result in memory for 15 minutes
   (`CACHE_TTL_SECONDS` in `config.py`), and serves it as a dashboard page and
-  a `/api/events` JSON endpoint.
+  a `/api/events` JSON endpoint. A stale cache is served as it stands and
+  refreshed behind the request, so no page load waits on a scrape — see
+  `_get_events`, and [`test_cache.py`](test_cache.py) for what that
+  guarantees.
 - The dashboard (`templates/index.html` + `static/app.js`) lets you filter by
   activity type, area, location, keyword, and "open spots only", grouped by
   day — or shows the same filtered set on a map.
