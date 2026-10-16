@@ -68,6 +68,17 @@ jobs:
             sleep 10
           done
 
+            # The watch endpoint needs the database. The dashboard does
+            # not — app.py disables accounts and keeps serving the
+            # schedule on purpose — so these say whether visitors are
+            # affected at all, or only alerting is.
+            echo "" >> /tmp/report.txt
+            for path in "/" "/api/events" "/api/watch-status"; do
+              out=$(curl -sS -o /tmp/b.txt -w '%{http_code} %{time_total}s %{size_download}B' \
+                      --max-time 120 "https://$host$path" 2>/dev/null) || true
+              echo "GET $path -> ${out:-no response}" >> /tmp/report.txt
+            done
+
           fi
 
           cat /tmp/report.txt
