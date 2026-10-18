@@ -113,7 +113,13 @@ app.config.update(
 )
 
 ACCOUNTS_ENABLED = False
+# Why accounts are off, for /api/version. The exception's *type* only —
+# never its message, which quotes the connection string and so the
+# password with it, and this is a public endpoint.
+ACCOUNTS_ERROR = ""
+
 if missing_env:
+    ACCOUNTS_ERROR = f"missing env: {', '.join(missing_env)}"
     logger.error(
         "Accounts disabled — missing environment variable(s): %s. The schedule "
         "dashboard will still work, but sign-in, synced preferences, and "
@@ -127,15 +133,46 @@ else:
         db.init_app(app)
         init_auth(app)
         app.register_blueprint(auth_bp)
-        with app.app_context():
-            db.create_all()
-            ensure_schema()
-        ACCOUNTS_ENABLED = True
-    except Exception:
+    except Exception as exc:
+        ACCOUNTS_ERROR = f"setup: {type(exc).__name__}"
         logger.exception(
-            "Accounts disabled — failed to initialize the database or Google "
-            "sign-in. The schedule dashboard will still work."
+            "Accounts disabled — failed to initialize Google sign-in. The "
+            "schedule dashboard will still work."
         )
+    else:
+        # Serverless Postgres — Neon, which this runs on, among others —
+        # scales to zero, and the first connection after an idle period has
+        # to wake it. Giving up on the first refusal disabled accounts for
+        # the entire life of the process: no sign-in, no favourites, and no
+        # alerting, until something happened to restart it. On a free tier
+        # that spins down and cold-starts all day, that is a coin flip on
+        # every boot.
+        #
+        # So wait for it. The pauses total about 17 seconds, which is far
+        # longer than a wake takes and far shorter than the gunicorn
+        # timeout.
+        for pause in (2, 5, 10, 0):
+            try:
+                with app.app_context():
+                    db.create_all()
+                    ensure_schema()
+                ACCOUNTS_ENABLED = True
+                ACCOUNTS_ERROR = ""
+                break
+            except Exception as exc:
+                ACCOUNTS_ERROR = f"database: {type(exc).__name__}"
+                if not pause:
+                    logger.exception(
+                        "Accounts disabled — the database did not answer. The "
+                        "schedule dashboard will still work."
+                    )
+                    break
+                logger.warning(
+                    "Database not ready (%s); retrying in %ss.",
+                    type(exc).__name__,
+                    pause,
+                )
+                time.sleep(pause)
 
 # Two locks, doing two different jobs.
 #
@@ -544,6 +581,13 @@ def api_version():
         {
             "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:12] or "unknown",
             "accounts_enabled": ACCOUNTS_ENABLED,
+            # Which of the four is missing, or which exception the database
+            # raised — enough to tell a misconfigured service from an
+            # unreachable one without quoting anything secret.
+            "accounts_error": ACCOUNTS_ERROR,
+            "env_present": {
+                name: bool(os.environ.get(name)) for name in ACCOUNT_ENV_VARS
+            },
             "sources": len(config.SOURCES),
             # Proof of whether the payload change is live: the page is
             # served without these, the API with them.
