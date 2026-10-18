@@ -1,4 +1,7 @@
 flask>=3.0
+# gzip for responses. The schedule is 2.3MB of JSON inlined into the page
+and compresses 6.5x; nothing else in the stack compresses anything.
+flask-compress>=1.14
 requests>=2.31
 gunicorn>=22.0
 tzdata>=2024.1

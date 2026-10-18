@@ -10,7 +10,23 @@ services:
     # One worker: this app keeps its schedule cache in memory, so a
     # single worker keeps that cache coherent and avoids re-scraping
     # the source portal redundantly across processes.
-    startCommand: gunicorn app:app --workers 1 --bind 0.0.0.0:$PORT
+    #
+    # Threads, though, because one worker with gunicorn's default sync
+    # class serves exactly one request at a time — so any slow request
+    # stalls the whole site, whatever the app does internally. The slow
+    # request here is /api/check-watches, which scrapes every source on
+    # purpose so that alert latency is the check interval and not the
+    # cache TTL. Threads let that happen alongside page loads. They share
+    # the one cache, which is what keeps a single worker worth having.
+    #
+    # And a timeout well past a full scrape: gunicorn kills a worker whose
+    # request exceeds it, and the default is 30 seconds. Forty sources
+    # across nine cities can exceed that, and the symptom would be the
+    # watch pass dying partway through — alerts silently stopping, with a
+    # worker restart in the log and nothing else to say why.
+    startCommand: >-
+      gunicorn app:app --workers 1 --threads 4 --timeout 120
+      --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.10

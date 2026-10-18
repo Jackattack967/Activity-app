@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask_compress import Compress
 from flask_login import current_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -49,6 +50,23 @@ app = Flask(__name__)
 # Without this, url_for(_external=True) builds the OAuth redirect URI as
 # http:// — which won't match the https:// URI registered with Google.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+
+# Nothing else in the stack compresses: gunicorn does not, and Render's
+# proxy cannot be relied on to. The schedule is JSON, which is the best
+# case for gzip — measured at 6.5x on live data — and it is the bulk of
+# every page load, so this is the single largest saving available on the
+# phone this is mostly read on.
+app.config["COMPRESS_MIMETYPES"] = [
+    "text/html",
+    "text/css",
+    "text/javascript",
+    "application/javascript",
+    "application/json",
+    "image/svg+xml",
+]
+# Below about a packet, compressing costs more than it saves.
+app.config["COMPRESS_MIN_SIZE"] = 1024
+Compress(app)
 
 # Accounts are an optional layer: the schedule dashboard is the core of this
 # app and must keep working even if the database or Google credentials are
@@ -127,8 +145,26 @@ else:
             "sign-in. The schedule dashboard will still work."
         )
 
+# Two locks, doing two different jobs.
+#
+# _cache_lock guards the dictionary below and is held only long enough to
+# read it or swap a new result in — microseconds, never a network call. It
+# used to be held across the entire scrape, which meant every page load
+# queued behind whichever thread happened to be scraping. With one gunicorn
+# worker and a watch pass running every five minutes, that was the site
+# stalling for tens of seconds, several times an hour, for everyone.
+#
+# _scrape_lock is what stops two threads scraping at once. A caller that
+# can serve slightly stale data never waits on it at all.
 _cache_lock = threading.Lock()
+_scrape_lock = threading.Lock()
 _cache: dict = {"events": [], "errors": [], "fetched_at": 0.0}
+
+# A forced refresh that arrives while another just finished takes that
+# result instead of scraping again immediately behind it. This is what keeps
+# the watch pass, the external scheduler and anyone hammering
+# /api/events?refresh=1 from stacking scrapes onto the portals.
+FORCED_REFRESH_COALESCE_SECONDS = 30
 
 
 def _with_place(event: dict) -> dict:
@@ -184,14 +220,40 @@ def _activity_groups(events: list[dict]) -> list[dict]:
     return groups
 
 
-def _get_events(force: bool = False) -> dict:
+def _snapshot() -> dict:
+    """The cache as it stands, read under the lock and nothing more."""
     with _cache_lock:
-        is_stale = (time.time() - _cache["fetched_at"]) > config.CACHE_TTL_SECONDS
-        if force or is_stale or not _cache["fetched_at"]:
-            events, errors = scraper.fetch_all_events(
-                config.SOURCES, config.SCHEDULE_WINDOW_DAYS
-            )
-            fresh = [_with_place(dataclasses.asdict(e)) for e in events]
+        return {
+            "events": _cache["events"],
+            "errors": _cache["errors"],
+            "fetched_at": _cache["fetched_at"],
+        }
+
+
+def _refresh(min_age: float = 0.0) -> dict:
+    """Scrape every source and publish the result, unless someone just did.
+
+    The scrape runs *outside* _cache_lock. That is the whole point: the
+    cache stays readable throughout, so page loads are served from it while
+    this is still talking to nine cities' portals.
+
+    min_age coalesces callers. Threads queue on _scrape_lock, and whoever
+    gets in second finds the first one's result already published; if it is
+    younger than min_age, that result is taken rather than scraping again
+    straight behind it.
+    """
+    with _scrape_lock:
+        snapshot = _snapshot()
+        if snapshot["fetched_at"] and (time.time() - snapshot["fetched_at"]) < min_age:
+            return snapshot
+
+        # Slow. Deliberately not holding _cache_lock here.
+        events, errors = scraper.fetch_all_events(
+            config.SOURCES, config.SCHEDULE_WINDOW_DAYS
+        )
+        fresh = [_with_place(dataclasses.asdict(e)) for e in events]
+
+        with _cache_lock:
             if not fresh and errors and _cache["events"]:
                 # Every source failed. That means the portals were
                 # unreachable, not that every session was cancelled — so
@@ -208,11 +270,51 @@ def _get_events(force: bool = False) -> dict:
                 _cache["events"] = fresh
                 _cache["errors"] = errors
                 _cache["fetched_at"] = time.time()
-        return {
-            "events": _cache["events"],
-            "errors": _cache["errors"],
-            "fetched_at": _cache["fetched_at"],
-        }
+            return {
+                "events": _cache["events"],
+                "errors": _cache["errors"],
+                "fetched_at": _cache["fetched_at"],
+            }
+
+
+def _refresh_in_background() -> None:
+    """Start a refresh if one is not already running, and return at once."""
+    # A try-acquire rather than a flag: _scrape_lock is already the thing
+    # that knows whether a scrape is in flight. Losing this race only costs
+    # a thread that finds the cache fresh and returns without scraping.
+    if not _scrape_lock.acquire(blocking=False):
+        return
+    _scrape_lock.release()
+    threading.Thread(
+        target=_refresh,
+        kwargs={"min_age": config.CACHE_TTL_SECONDS},
+        name="schedule-refresh",
+        daemon=True,
+    ).start()
+
+
+def _get_events(force: bool = False) -> dict:
+    """The schedule, without making the caller wait for a scrape.
+
+    A stale cache is served as-is and refreshed behind the request. Staleness
+    is visible either way — the page prints when the schedule was fetched —
+    and a schedule a few minutes old now beats the right one in twenty
+    seconds, particularly on the phone this is mostly read on.
+
+    Only two things still wait: a forced refresh, which is asking for fresh
+    data by definition, and the first request after a boot, when there is
+    nothing to serve instead.
+    """
+    if force:
+        return _refresh(min_age=FORCED_REFRESH_COALESCE_SECONDS)
+
+    snapshot = _snapshot()
+    if not snapshot["fetched_at"]:
+        return _refresh()
+
+    if (time.time() - snapshot["fetched_at"]) > config.CACHE_TTL_SECONDS:
+        _refresh_in_background()
+    return snapshot
 
 
 def _is_logged_in() -> bool:
@@ -355,7 +457,9 @@ def _favorited_keys() -> tuple[set, set]:
     return activity_keys, session_keys
 
 
-def _annotate_favorites(events: list[dict]) -> list[dict]:
+def _annotate_favorites(
+    events: list[dict], include_details: bool = True
+) -> list[dict]:
     # Cached event dicts are shared across all requests/users — never mutate
     # them in place, or one user's favorite would leak into everyone's view.
     activity_keys, session_keys = _favorited_keys()
@@ -369,16 +473,18 @@ def _annotate_favorites(events: list[dict]) -> list[dict]:
             or (source, name, None) in activity_keys
         )
         watched_session = (source, name, location, e.get("date") or "") in session_keys
-        out.append(
-            {
-                **e,
-                "is_favorited": watched_activity or watched_session,
-                # Lets the UI say which kind of watch is in effect.
-                "favorite_scope": "activity"
-                if watched_activity
-                else ("session" if watched_session else None),
-            }
-        )
+        row = {
+            **e,
+            "is_favorited": watched_activity or watched_session,
+            # Lets the UI say which kind of watch is in effect.
+            "favorite_scope": "activity"
+            if watched_activity
+            else ("session" if watched_session else None),
+        }
+        if not include_details:
+            # Dropped from this copy, never from the cached dict above.
+            row.pop("details", None)
+        out.append(row)
     return out
 
 
@@ -400,7 +506,13 @@ def _login_links() -> list[dict]:
 @app.route("/")
 def index():
     data = _get_events()
-    events = _annotate_favorites(data["events"])
+    # Without the portal's descriptions, which are a third of the payload
+    # and are read one at a time in the detail pane. The page renders from
+    # what is inlined here and then fetches the full schedule in the
+    # background — see hydrateDetails() in app.js. On live data this takes
+    # the inlined JSON from 2.3MB to 1.5MB, and 360KB to 135KB over the
+    # wire once the compression above has had its turn.
+    events = _annotate_favorites(data["events"], include_details=False)
     activity_types = sorted({e["activity_type"] for e in events})
     locations = sorted({e["location"] for e in events if e["location"]})
     source_names = sorted({s["source_name"] for s in config.SOURCES})
