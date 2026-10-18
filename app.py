@@ -112,6 +112,30 @@ app.config.update(
     SESSION_COOKIE_SECURE=__name__ != "__main__",
 )
 
+def _name_the_driver(url: str) -> str:
+    """Say which Postgres driver to use instead of taking the default.
+
+    SQLAlchemy 2.1 changed what "postgresql://" means: it reaches for
+    psycopg (v3) where it used to reach for psycopg2. requirements.txt
+    declares psycopg2-binary, and flask-sqlalchemy pulls SQLAlchemy in
+    unpinned — so the first rebuild that happened to pick up 2.1 broke
+    every database connection with "ModuleNotFoundError: psycopg", taking
+    sign-in, favourites and all alerting with it, without a line of code
+    in this repository having changed.
+
+    Naming the driver makes that impossible rather than merely fixed: a
+    future default can move again and this will not notice.
+
+    Also rewrites the "postgres://" some providers still hand out, which
+    SQLAlchemy has rejected since 1.4.
+    """
+    if url.startswith("postgres://"):
+        url = "postgresql://" + url[len("postgres://") :]
+    if url.startswith("postgresql://"):
+        url = "postgresql+psycopg2://" + url[len("postgresql://") :]
+    return url
+
+
 ACCOUNTS_ENABLED = False
 # Why accounts are off, for /api/version. The exception's *type* only —
 # never its message, which quotes the connection string and so the
@@ -127,14 +151,21 @@ if missing_env:
         ", ".join(missing_env),
     )
 else:
-    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ["DATABASE_URL"]
+    app.config["SQLALCHEMY_DATABASE_URI"] = _name_the_driver(
+        os.environ["DATABASE_URL"]
+    )
     app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {"pool_pre_ping": True}
     try:
         db.init_app(app)
         init_auth(app)
         app.register_blueprint(auth_bp)
     except Exception as exc:
-        ACCOUNTS_ERROR = f"setup: {type(exc).__name__}"
+        # The module's name for an import failure. A package name gives
+        # away nothing, and without it "ModuleNotFoundError" says only
+        # that something is missing, not what — which is the one thing
+        # needed to fix it.
+        detail = getattr(exc, "name", "") or ""
+        ACCOUNTS_ERROR = f"setup: {type(exc).__name__}" + (f" ({detail})" if detail else "")
         logger.exception(
             "Accounts disabled — failed to initialize Google sign-in. The "
             "schedule dashboard will still work."
@@ -160,7 +191,10 @@ else:
                 ACCOUNTS_ERROR = ""
                 break
             except Exception as exc:
-                ACCOUNTS_ERROR = f"database: {type(exc).__name__}"
+                detail = getattr(exc, "name", "") or ""
+                ACCOUNTS_ERROR = f"database: {type(exc).__name__}" + (
+                    f" ({detail})" if detail else ""
+                )
                 if not pause:
                     logger.exception(
                         "Accounts disabled — the database did not answer. The "

@@ -172,5 +172,30 @@ check("the schedule survives", data["events"], [{"keep": True}])
 check("the errors are reported", len(data["errors"]), 1)
 check("and it is not marked as freshly fetched", webapp._cache["fetched_at"], kept)
 
+print("\n8. THE DATABASE URL NAMES ITS DRIVER")
+# SQLAlchemy 2.1 changed what "postgresql://" resolves to — psycopg v3
+# rather than psycopg2 — and this app declares psycopg2-binary. A rebuild
+# that picked up the new default took out sign-in, favourites and every
+# alert, with nothing in this repository having changed. Naming the driver
+# is what stops a dependency's default from deciding that again.
+for given, want in [
+    ("postgresql://u:p@host/db", "postgresql+psycopg2://u:p@host/db"),
+    # Still handed out by some providers; SQLAlchemy has rejected it since 1.4.
+    ("postgres://u:p@host/db", "postgresql+psycopg2://u:p@host/db"),
+    # Already explicit, in either direction: left exactly as it is.
+    ("postgresql+psycopg2://u:p@host/db", "postgresql+psycopg2://u:p@host/db"),
+    ("postgresql+psycopg://u:p@host/db", "postgresql+psycopg://u:p@host/db"),
+    ("sqlite:///local.db", "sqlite:///local.db"),
+]:
+    check(f"{given.split('://')[0]}://", webapp._name_the_driver(given), want)
+
+# The query string Neon and friends require must survive untouched.
+check(
+    "options and flags are preserved",
+    webapp._name_the_driver("postgresql://u:p@h/db?sslmode=require&x=1"),
+    "postgresql+psycopg2://u:p@h/db?sslmode=require&x=1",
+)
+
+
 print("\n" + ("ALL PASSED" if not FAIL else f"FAILURES: {FAIL}"))
 sys.exit(1 if FAIL else 0)
