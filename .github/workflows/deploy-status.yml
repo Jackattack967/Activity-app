@@ -1,0 +1,60 @@
+name: What is deployed
+
+# There is no other way to see this. Render's dashboard is the only place
+# that shows deploy state, and an agent working on this repository cannot
+# reach it or the app — GitHub is the one host it can talk to. Without
+# this, "is my change live?" gets answered by inferring from page sizes,
+# which during one incident produced three wrong conclusions in a row:
+# that the site was down, that a change had broken it, and that deploys
+# had stopped. None were true.
+#
+# /api/version answers it in one request. No secrets: the hostname is
+# public and the endpoint returns no values, only which commit is running
+# and whether accounts came up.
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/deploy-status.yml"
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Ask the deployment what it is
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APP: https://activity-schedule-dashboard.onrender.com
+        run: |
+          # Generous timeout: the free tier spins down, and a cold start
+          # measured 31 seconds.
+          out=$(curl -sS -o /tmp/version.json \
+                  -w '%{http_code} in %{time_total}s' \
+                  --max-time 120 "$APP/api/version") || true
+          size=$(curl -sS -o /dev/null -H 'Accept-Encoding: gzip' \
+                   -w '%{size_download}' --max-time 120 "$APP/") || true
+
+          {
+            echo "HEAD of main:  ${GITHUB_SHA:0:12}"
+            echo "/api/version:  $out"
+            echo "  $(head -c 400 /tmp/version.json 2>/dev/null)"
+            echo ""
+            echo "GET / as a browser fetches it (gzip offered): ${size:-?} bytes"
+          } > /tmp/report.txt
+          cat /tmp/report.txt
+
+          {
+            printf '### What is deployed\n\n```\n'
+            cat /tmp/report.txt
+            printf '```\n'
+          } > /tmp/comment.md
+          jq -Rs '{body: .}' /tmp/comment.md > /tmp/payload.json
+          curl -sS -X POST -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
+            -d @/tmp/payload.json -o /dev/null -w 'Posted: HTTP %{http_code}\n'
