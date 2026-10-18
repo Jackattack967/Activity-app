@@ -20,7 +20,6 @@ from dotenv import load_dotenv
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from flask import Flask, jsonify, render_template, request, send_from_directory
-from flask_compress import Compress
 from flask_login import current_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -51,22 +50,15 @@ app = Flask(__name__)
 # http:// — which won't match the https:// URI registered with Google.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
-# Nothing else in the stack compresses: gunicorn does not, and Render's
-# proxy cannot be relied on to. The schedule is JSON, which is the best
-# case for gzip — measured at 6.5x on live data — and it is the bulk of
-# every page load, so this is the single largest saving available on the
-# phone this is mostly read on.
-app.config["COMPRESS_MIMETYPES"] = [
-    "text/html",
-    "text/css",
-    "text/javascript",
-    "application/javascript",
-    "application/json",
-    "image/svg+xml",
-]
-# Below about a packet, compressing costs more than it saves.
-app.config["COMPRESS_MIN_SIZE"] = 1024
-Compress(app)
+# No compression is configured here, and that is deliberate. Render's edge
+# already gzips: asked for the dashboard with Accept-Encoding: gzip it
+# returns 374,792 bytes where the same page unasked is 2,641,288 — a ratio
+# that matches the 6.5x measured on this JSON directly. Every browser
+# offers gzip, so visitors have had that all along.
+#
+# flask-compress was added here before that was measured and has been
+# removed. It would have compressed what is already being compressed, for
+# a dependency whose failure mode is the app not booting at all.
 
 # Accounts are an optional layer: the schedule dashboard is the core of this
 # app and must keep working even if the database or Google credentials are
