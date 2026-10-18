@@ -73,11 +73,26 @@ jobs:
             # schedule on purpose — so these say whether visitors are
             # affected at all, or only alerting is.
             echo "" >> /tmp/report.txt
-            for path in "/" "/api/events" "/api/watch-status"; do
+            for path in "/" "/api/events" "/api/watch-status" "/api/version"; do
               out=$(curl -sS -o /tmp/b.txt -w '%{http_code} %{time_total}s %{size_download}B' \
                       --max-time 120 "https://$host$path" 2>/dev/null) || true
               echo "GET $path -> ${out:-no response}" >> /tmp/report.txt
+              if [ "$path" = "/api/version" ] && [ -s /tmp/b.txt ]; then
+                echo "  $(head -c 200 /tmp/b.txt)" >> /tmp/report.txt
+              fi
             done
+
+            # Whether compression is live. curl sends no Accept-Encoding
+            # unless asked, so the sizes above are always uncompressed and
+            # say nothing about it either way.
+            echo "" >> /tmp/report.txt
+            enc=$(curl -sS -o /dev/null -H 'Accept-Encoding: gzip' \
+                    -w '%{http_code} %{size_download}B enc=%{content_type}' \
+                    --max-time 120 "https://$host/" 2>/dev/null) || true
+            echo "GET / with gzip offered -> ${enc:-no response}" >> /tmp/report.txt
+            hdr=$(curl -sSI -H 'Accept-Encoding: gzip' --max-time 120 \
+                    "https://$host/" 2>/dev/null | grep -i '^content-encoding' || true)
+            echo "  content-encoding: ${hdr:-none}" >> /tmp/report.txt
 
           fi
 

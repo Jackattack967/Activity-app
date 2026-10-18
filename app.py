@@ -535,6 +535,31 @@ def index():
     )
 
 
+@app.route("/api/version")
+def api_version():
+    """Which commit is actually running, and what the app thinks is on.
+
+    Added after an hour spent unable to answer exactly that. A page of the
+    expected size proves nothing — a deploy that never happened and a
+    deploy that happened look identical from outside until something in
+    the response changes size, and "it looks about the same" is not a
+    measurement.
+
+    Render sets RENDER_GIT_COMMIT itself; it is blank when running
+    anywhere else.
+    """
+    return jsonify(
+        {
+            "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:12] or "unknown",
+            "accounts_enabled": ACCOUNTS_ENABLED,
+            "sources": len(config.SOURCES),
+            # Proof of whether the payload change is live: the page is
+            # served without these, the API with them.
+            "serves_details_inline": False,
+        }
+    )
+
+
 @app.route("/privacy")
 def privacy():
     return render_template("privacy.html", source_names=sorted({s["source_name"] for s in config.SOURCES}))
