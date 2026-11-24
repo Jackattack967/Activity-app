@@ -1,0 +1,19 @@
+"AppBuild"
+{
+	"AppID" "YOUR_APP_ID"
+	"Desc" "This Game Was Made By AI 1.0.0"
+	"ContentRoot" "../dist/"
+	"BuildOutput" "./output/"
+	"Depots"
+	{
+		"YOUR_WINDOWS_DEPOT_ID"
+		{
+			"FileMapping"
+			{
+				"LocalPath" "win-unpacked/*"
+				"DepotPath" "."
+				"recursive" "1"
+			}
+		}
+	}
+}

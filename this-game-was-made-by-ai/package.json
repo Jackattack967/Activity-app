@@ -1,0 +1,28 @@
+{
+  "name": "this-game-was-made-by-ai",
+  "productName": "This Game Was Made By AI",
+  "version": "1.0.0",
+  "description": "A short comedy platformer narrated by the AI that (allegedly) made it.",
+  "main": "electron/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux",
+    "playtest": "node tools/playtest.js"
+  },
+  "devDependencies": {
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.thisgamewasmadebyai.game",
+    "productName": "This Game Was Made By AI",
+    "directories": { "output": "dist" },
+    "files": ["index.html", "src/**", "electron/**"],
+    "win": { "target": "dir" },
+    "linux": { "target": "dir" },
+    "mac": { "target": "dir" }
+  }
+}
