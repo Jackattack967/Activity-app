@@ -1,0 +1,36 @@
+{
+  "extraKnownMarketplaces": {
+    "gamedev-claude-plugins": {
+      "source": {
+        "source": "github",
+        "repo": "sponticelli/gamedev-claude-plugins"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "thinking@gamedev-claude-plugins": true,
+    "game-design@gamedev-claude-plugins": true,
+    "engineering@gamedev-claude-plugins": true,
+    "devops@gamedev-claude-plugins": true,
+    "ui-ux@gamedev-claude-plugins": true,
+    "art@gamedev-claude-plugins": true,
+    "audio@gamedev-claude-plugins": true,
+    "product@gamedev-claude-plugins": true,
+    "marketing@gamedev-claude-plugins": true,
+    "operations@gamedev-claude-plugins": true,
+    "strategy@gamedev-claude-plugins": true,
+    "scope-guardian@gamedev-claude-plugins": true,
+    "juice@gamedev-claude-plugins": true,
+    "accessibility@gamedev-claude-plugins": true,
+    "narrative@gamedev-claude-plugins": true,
+    "level-design@gamedev-claude-plugins": true,
+    "multiplayer@gamedev-claude-plugins": true,
+    "technical-art@gamedev-claude-plugins": true,
+    "ai-systems@gamedev-claude-plugins": true,
+    "procedural@gamedev-claude-plugins": true,
+    "certification@gamedev-claude-plugins": true,
+    "user-research@gamedev-claude-plugins": true,
+    "social-systems@gamedev-claude-plugins": true,
+    "web-games@gamedev-claude-plugins": true
+  }
+}
